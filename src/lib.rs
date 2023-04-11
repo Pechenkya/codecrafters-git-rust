@@ -1,8 +1,9 @@
 pub mod commands {
-    use anyhow::Result;
+    use anyhow::{ anyhow, Result };
     use std::fs;
 
     use std::io::prelude::*;
+    use std::path::Path;
     use flate2::read::ZlibDecoder;
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
@@ -19,7 +20,11 @@ pub mod commands {
     }
 
     fn compute_path_from_sha(sha: &String) -> String {
-        String::from(".git/objects/") + &sha[0..2] + "/" + &sha[2..sha.len()]
+        let mut prefix_path = String::from("./");
+        while !Path::new(&(prefix_path.clone() + ".git")).is_dir() {
+            prefix_path += "../";
+        }
+        prefix_path + ".git/objects/" + &sha[0..2] + "/" + &sha[2..sha.len()]
     }
 
     fn add_blob_prefix(text: &String) -> String {
@@ -41,7 +46,7 @@ pub mod commands {
 
         // Divide data (header, text)
         if let Some((_, data)) = buff_string.split_once('\x00') {
-            // Print out file content
+            // Print out object content
             print!("{data}");
         }
 
@@ -64,7 +69,7 @@ pub mod commands {
 
         // Create path
         let path_to_save: String = compute_path_from_sha(&hash);
-        std::fs::create_dir_all(std::path::Path::new(&path_to_save).parent().unwrap())?;
+        std::fs::create_dir_all(Path::new(&path_to_save).parent().unwrap())?;
 
         // Save object
         let mut obj: fs::File = fs::File::create(path_to_save)?;
@@ -72,6 +77,38 @@ pub mod commands {
 
         // Print hash
         println!("{hash}");
+        Ok(())
+    }
+
+    /// Read a tree object
+    pub fn read_tree_names(sha: &String) -> Result<()> {
+        // Compute path to object
+        let path: String = compute_path_from_sha(sha);
+
+        // Read binary and decompress data
+        let bytes: Vec<u8> = fs::read(path)?;
+        let mut decoder = ZlibDecoder::new(bytes.as_slice());
+        let mut bytes_decoded: Vec<u8> = Vec::new();
+        decoder.read_to_end(&mut bytes_decoded)?;
+
+        // Convert to string and divide it into blocks
+        let buff_string = String::from_utf8_lossy(bytes_decoded.as_slice());
+        let blocks: Vec<_> = buff_string.split('\0').collect();
+
+        // If header block is for correct tree -> parse blocks to find file/folder names
+        let mut contents: Vec<&str> = Vec::new();
+        if let ("tree", _tree_size) = blocks[0].split_once(' ').unwrap() {
+            for text in &blocks[1..blocks.len() - 1] {
+                let literals: Vec<_> = text.split(' ').collect();
+                contents.push(literals.last().unwrap());
+            }
+        } else {
+            return Err(anyhow!("Not a tree object!"));
+        }
+
+        contents.sort();
+        contents.iter().for_each(|file| println!("{file}"));
+
         Ok(())
     }
 
@@ -83,7 +120,14 @@ pub mod commands {
         fn check_sha_convert() {
             let sha = String::from("e673d1b7eaa0aa01b5bc2442d570a765bdaae751");
             let path = compute_path_from_sha(&sha);
-            assert_eq!(path, ".git/objects/e6/73d1b7eaa0aa01b5bc2442d570a765bdaae751");
+            assert_eq!(path, "./.git/objects/e6/73d1b7eaa0aa01b5bc2442d570a765bdaae751");
+        }
+
+        #[test]
+        fn path_test() {
+            let start = Path::new(".");
+            println!("{:?}", start.parent().unwrap().parent());
+            assert!(true);
         }
     }
 }

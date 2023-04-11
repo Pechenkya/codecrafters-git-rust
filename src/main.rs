@@ -26,6 +26,12 @@ fn main() {
         } else {
             println!("Unrecognised 'hash-object' signature!");
         }
+    } else if args[0] == "ls-tree" {
+        if args.len() == 3 && args[1] == "--name-only" {
+            commands::read_tree_names(&args[2]).unwrap();
+        } else {
+            println!("Unrecognised 'ls-tree' signature!");
+        }
     } else {
         println!("unknown command: {}", args[0]);
     }
