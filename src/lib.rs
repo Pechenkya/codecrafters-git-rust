@@ -11,12 +11,12 @@ pub mod commands {
     use hex;
 
     /// Command to init git repository in current folder
-    pub fn init() {
+    pub fn init() -> String {
         fs::create_dir(".git").unwrap();
         fs::create_dir(".git/objects").unwrap();
         fs::create_dir(".git/refs").unwrap();
         fs::write(".git/HEAD", "ref: refs/heads/master\n").unwrap();
-        println!("Initialized git directory")
+        "Initialized git directory".to_string()
     }
 
     fn compute_path_from_sha(sha: &String) -> String {
@@ -32,7 +32,7 @@ pub mod commands {
     }
 
     /// Open file and print binary data in pretty way
-    pub fn cat_file_print(sha: &String) -> Result<()> {
+    pub fn cat_file_print(sha: &String) -> Result<String> {
         // Compute path to blob
         let path: String = compute_path_from_sha(sha);
 
@@ -45,16 +45,20 @@ pub mod commands {
         decoder.read_to_string(&mut buff_string)?;
 
         // Divide data (header, text)
-        if let Some((_, data)) = buff_string.split_once('\x00') {
+        if let Some((header, data)) = buff_string.split_once('\0') {
             // Print out object content
-            print!("{data}");
+            if let Some(("blob", _size)) = header.split_once(' ') {
+                Ok(data.to_owned())
+            } else {
+                Err(anyhow!("Not a blob!"))
+            }
+        } else {
+            Err(anyhow!("Unrecognised file structure!"))
         }
-
-        Ok(())
     }
 
     /// Create a blob from a file
-    pub fn hash_object_write(file_path: &String) -> Result<()> {
+    pub fn hash_object_write(file_path: &String) -> Result<String> {
         // Get data from file and format it according to git rules
         let bytes: Vec<u8> = fs::read(file_path)?;
         let with_header: String = add_blob_prefix(&String::from_utf8(bytes)?);
@@ -76,12 +80,11 @@ pub mod commands {
         obj.write_all(encoded_text.as_slice())?;
 
         // Print hash
-        println!("{hash}");
-        Ok(())
+        Ok(hash)
     }
 
     /// Read a tree object
-    pub fn read_tree_names(sha: &String) -> Result<()> {
+    pub fn read_tree_names(sha: &String) -> Result<String> {
         // Compute path to object
         let path: String = compute_path_from_sha(sha);
 
@@ -99,17 +102,18 @@ pub mod commands {
         let mut contents: Vec<&str> = Vec::new();
         if let ("tree", _tree_size) = blocks[0].split_once(' ').unwrap() {
             for text in &blocks[1..blocks.len() - 1] {
-                let literals: Vec<_> = text.split(' ').collect();
-                contents.push(literals.last().unwrap());
+                let (_, file_name) = text.rsplit_once(' ').unwrap();
+                contents.push(file_name);
             }
         } else {
             return Err(anyhow!("Not a tree object!"));
         }
 
+        // Sort output and print it
         contents.sort();
-        contents.iter().for_each(|file| println!("{file}"));
+        let out = contents.join("\n");
 
-        Ok(())
+        Ok(out)
     }
 
     #[cfg(test)]
@@ -121,13 +125,6 @@ pub mod commands {
             let sha = String::from("e673d1b7eaa0aa01b5bc2442d570a765bdaae751");
             let path = compute_path_from_sha(&sha);
             assert_eq!(path, "./.git/objects/e6/73d1b7eaa0aa01b5bc2442d570a765bdaae751");
-        }
-
-        #[test]
-        fn path_test() {
-            let start = Path::new(".");
-            println!("{:?}", start.parent().unwrap().parent());
-            assert!(true);
         }
     }
 }
