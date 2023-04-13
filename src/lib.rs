@@ -123,11 +123,7 @@ pub mod commands {
 
         // If header block is for correct tree -> parse blocks to find file/folder names
         let mut names: Vec<String> = Vec::new();
-        if
-            let ("tree", _tree_size) = header
-                .split_once(' ')
-                .ok_or(anyhow!("Cannot Split tree into blocks!"))?
-        {
+        if let ("tree", _tree_size) = header.split_once(' ').ok_or(anyhow!("Not a tree type!"))? {
             // Simple parse, better to be modified to get mode and sha
             while !text.is_empty() {
                 if let Some((_mode_and_prev_sha, rest)) = text.split_once(' ') {
