@@ -108,12 +108,16 @@ pub mod commands {
         let mut bytes_decoded: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut bytes_decoded)?;
 
-        // Parse text and return filenames
-        let result = parse_tree_filenames(&bytes_decoded)?;
+        // Parse text and extract filenames
+        let result: Vec<_> = parse_tree(&bytes_decoded)?
+            .into_iter()
+            .map(|obj| obj.0)
+            .collect();
         Ok(result.join("\n"))
     }
 
-    fn parse_tree_filenames(binary: &Vec<u8>) -> Result<Vec<String>> {
+    /// Returns tuples (<file name>, <mode>, <SHA-1>) from correct tree object
+    fn parse_tree(binary: &Vec<u8>) -> Result<Vec<(String, String, String)>> {
         // Convert to string and divide it into blocks
         #[allow(unsafe_code)]
         let buff_string = unsafe { String::from_utf8_unchecked(binary.to_vec()) };
@@ -121,29 +125,36 @@ pub mod commands {
             .split_once('\0')
             .ok_or(anyhow!("Cannot separate header!"))?;
 
-        // If header block is for correct tree -> parse blocks to find file/folder names
-        let mut names: Vec<String> = Vec::new();
+        // If header block is for correct tree -> parse text to find tuples (<file name>, <mode>, <SHA-1>)
+        let mut contents: Vec<(String, String, String)> = Vec::new();
         if let ("tree", _tree_size) = header.split_once(' ').ok_or(anyhow!("Not a tree type!"))? {
-            // Simple parse, better to be modified to get mode and sha
+            // Simple parse with unchecked string
             while !text.is_empty() {
-                if let Some((_mode_and_prev_sha, rest)) = text.split_once(' ') {
+                // Check if struct is correct and we can extract mode
+                if let Some((_mode, rest)) = text.split_once(' ') {
+                    // Extract filename
                     let (file_name, rest) = rest
                         .split_once('\0')
                         .ok_or(anyhow!("Cannot separate file name!"))?;
 
+                    // Extract SHA-1
                     let (_sha, rem) = rest.split_at(20);
                     text = rem;
 
-                    names.push(file_name.to_string());
+                    // Add content
+                    contents.push((file_name.to_string(), _mode.to_string(), hex::encode(_sha)));
+
+                    // Debug log
+                    // println!("{_mode} {file_name}: {}", hex::encode(_sha));
                 } else {
-                    break;
+                    return Err(anyhow!("Not a tree object!"));
                 }
             }
         } else {
             return Err(anyhow!("Not a tree object!"));
         }
 
-        Ok(names)
+        Ok(contents)
     }
 
     /// Create a tree object from a working directory
