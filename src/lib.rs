@@ -117,21 +117,23 @@ pub mod commands {
         // Convert to string and divide it into blocks
         #[allow(unsafe_code)]
         let buff_string = unsafe { String::from_utf8_unchecked(binary.to_vec()) };
-        let (header, mut text) = buff_string.split_once('\0').expect("Cannot separate header!");
+        let (header, mut text) = buff_string
+            .split_once('\0')
+            .ok_or(anyhow!("Cannot separate header!"))?;
 
         // If header block is for correct tree -> parse blocks to find file/folder names
         let mut names: Vec<String> = Vec::new();
         if
             let ("tree", _tree_size) = header
                 .split_once(' ')
-                .expect("Cannot Split tree into blocks!")
+                .ok_or(anyhow!("Cannot Split tree into blocks!"))?
         {
             // Simple parse, better to be modified to get mode and sha
             while !text.is_empty() {
                 if let Some((_mode_and_prev_sha, rest)) = text.split_once(' ') {
                     let (file_name, rest) = rest
                         .split_once('\0')
-                        .expect("Cannot separate file name!");
+                        .ok_or(anyhow!("Cannot separate file name!"))?;
 
                     let (_sha, rem) = rest.split_at(20);
                     text = rem;
