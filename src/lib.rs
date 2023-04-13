@@ -11,7 +11,7 @@ pub mod commands {
     use hex;
 
     const BLOB_MODE: &[u8] = "100644 ".as_bytes();
-    const TREE_MODE: &[u8] = "040000 ".as_bytes();
+    const TREE_MODE: &[u8] = "40000 ".as_bytes();
 
     /// Command to init git repository in current folder
     pub fn init() -> String {
@@ -155,11 +155,11 @@ pub mod commands {
     /// Recursive function to create subtrees
     fn write_tree_with_path<T: AsRef<Path>>(folder_path: &T) -> Result<String> {
         // Get folder entries and sort them
-        let entries: Vec<_> = fs
+        let mut entries: Vec<_> = fs
             ::read_dir(folder_path)?
             .map(|e| e.unwrap())
             .collect();
-        // entries.sort_by_key(|dir| { dir.file_name() });
+        entries.sort_by_key(|dir| { dir.file_name() });
 
         // Accumulate data in contents vec
         let mut contents: Vec<u8> = Vec::new();
