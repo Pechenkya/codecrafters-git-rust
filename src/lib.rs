@@ -115,7 +115,8 @@ pub mod commands {
 
     fn parse_tree_filenames(binary: &Vec<u8>) -> Result<Vec<String>> {
         // Convert to string and divide it into blocks
-        let buff_string = String::from_utf8_lossy(binary.as_slice());
+        #[allow(unsafe_code)]
+        let buff_string = unsafe { String::from_utf8_unchecked(binary.to_vec()) };
         let (header, mut text) = buff_string.split_once('\0').expect("Cannot separate header!");
 
         // If header block is for correct tree -> parse blocks to find file/folder names
@@ -132,7 +133,9 @@ pub mod commands {
                         .split_once('\0')
                         .expect("Cannot separate file name!");
 
-                    text = rest;
+                    let (_sha, rem) = rest.split_at(20);
+                    text = rem;
+
                     names.push(file_name.to_string());
                 } else {
                     break;
