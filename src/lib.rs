@@ -146,7 +146,7 @@ pub mod commands {
     }
 
     /// Returns tuples (<file name>, <mode>, <SHA-1>) from correct tree object
-    fn parse_tree(binary: &Vec<u8>) -> Result<Vec<(String, String, String)>> {
+    fn parse_tree(binary: &[u8]) -> Result<Vec<(String, String, String)>> {
         // Convert to string and divide it into blocks
         #[allow(unsafe_code)]
         let buff_string = unsafe { String::from_utf8_unchecked(binary.to_vec()) };
