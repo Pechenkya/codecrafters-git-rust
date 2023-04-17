@@ -10,8 +10,11 @@ pub mod commands {
     use sha1::{ Sha1, Digest };
     use hex;
 
-    const BLOB_MODE: &[u8] = "100644 ".as_bytes();
-    const TREE_MODE: &[u8] = "40000 ".as_bytes();
+    // Hardcoded constants
+    const BLOB_MODE: &[u8] = b"100644 ";
+    const TREE_MODE: &[u8] = b"40000 ";
+    // const COMMITER_NAME: &[u8] = b"Petro Bondar";
+    // const COMMITER_EMAIL: &[u8] = b"pb@gmail.com ";
 
     /// Command to init git repository in current folder
     pub fn init() -> String {
@@ -40,8 +43,13 @@ pub mod commands {
         Ok(path)
     }
 
-    fn add_blob_prefix(text: &String) -> String {
-        String::from("blob ") + text.len().to_string().as_str() + "\0" + text.as_str()
+    fn add_data_prefix(prefix: &str, mut text: Vec<u8>) -> Vec<u8> {
+        let mut result = prefix.as_bytes().to_vec();
+        result.push(b' ');
+        result.append(&mut text.len().to_string().into_bytes());
+        result.push(b'\0');
+        result.append(&mut text);
+        result
     }
 
     /// Open file and print binary data in pretty way
@@ -65,10 +73,10 @@ pub mod commands {
         // Divide data (header, text)
         if let Some((header, data)) = buff_string.split_once('\0') {
             // Print out object content
-            if let Some(("blob", _size)) = header.split_once(' ') {
+            if let Some(("blob", _size)) | Some(("commit", _size)) = header.split_once(' ') {
                 Ok(data.to_owned())
             } else {
-                Err(anyhow!("Not a blob!"))
+                Err(anyhow!("Not implemented for this object!")) // TODO: Implement for tree
             }
         } else {
             Err(anyhow!("Unrecognised file structure!"))
@@ -80,15 +88,15 @@ pub mod commands {
     pub fn hash_object_write<T: AsRef<Path>>(file_path: &T) -> Result<String> {
         // Get data from file and format it according to git rules
         let bytes: Vec<u8> = fs::read(file_path)?;
-        let with_header: String = add_blob_prefix(&String::from_utf8(bytes)?);
-
-        // Generate Hash and encode it to hex
-        let hash = hex::encode(Sha1::new().chain_update(with_header.as_bytes()).finalize());
+        let with_header: Vec<u8> = add_data_prefix("blob", bytes);
 
         // Compress data
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(with_header.as_bytes())?;
+        encoder.write_all(with_header.as_slice())?;
         let encoded_text: Vec<u8> = encoder.finish()?;
+
+        // Generate Hash and encode it to hex
+        let hash = hex::encode(Sha1::new().chain_update(with_header).finalize());
 
         // Create path
         let path_to_save: String = compute_path_from_sha(&hash)?;
@@ -210,10 +218,7 @@ pub mod commands {
         }
 
         // Add header to the text
-        let mut text: Vec<u8> = (String::from("tree ") + contents.len().to_string().as_str() + "\0")
-            .as_bytes()
-            .to_vec();
-        text.append(&mut contents);
+        let text: Vec<u8> = add_data_prefix("tree", contents);
 
         // Generate Hash and encode it to hex
         let hash = hex::encode(Sha1::new().chain_update(text.as_slice()).finalize());
@@ -241,6 +246,7 @@ pub mod commands {
         commit_sha: &String,
         message: &String
     ) -> Result<String> {
+        println!("{}, {}, {}", tree_sha, commit_sha, message);
         Ok("".to_string())
     }
 
@@ -257,9 +263,9 @@ pub mod commands {
 
         #[test]
         fn check_blob_prefix() {
-            let contents = "hello world!".to_string();
-            let res = add_blob_prefix(&contents);
-            assert_eq!(res, "blob 12\0hello world!");
+            let contents = "hello world!".as_bytes().to_vec();
+            let res = add_data_prefix("blob", contents);
+            assert_eq!(res, "blob 12\0hello world!".as_bytes().to_vec());
         }
     }
 }
