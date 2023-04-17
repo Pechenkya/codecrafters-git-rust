@@ -50,7 +50,12 @@ pub mod commands {
         let path: String = compute_path_from_sha(sha)?;
 
         // Read binary
-        let bytes: Vec<u8> = fs::read(path)?;
+        let bytes: Vec<u8> = match fs::read(path) {
+            Ok(data) => data,
+            Err(_) => {
+                return Err(anyhow!("Object {} is not found", sha));
+            }
+        };
 
         // Decompress data and read it to string
         let mut decoder = ZlibDecoder::new(bytes.as_slice());
@@ -103,7 +108,12 @@ pub mod commands {
         let path: String = compute_path_from_sha(sha)?;
 
         // Read binary and decompress data
-        let bytes: Vec<u8> = fs::read(path)?;
+        let bytes: Vec<u8> = match fs::read(path) {
+            Ok(data) => data,
+            Err(_) => {
+                return Err(anyhow!("Object {} is not found", sha));
+            }
+        };
         let mut decoder = ZlibDecoder::new(bytes.as_slice());
         let mut bytes_decoded: Vec<u8> = Vec::new();
         decoder.read_to_end(&mut bytes_decoded)?;
@@ -223,6 +233,15 @@ pub mod commands {
 
         // Print hash
         Ok(hash)
+    }
+
+    /// Recursive function to create subtrees
+    pub fn create_commit_with_message(
+        tree_sha: &String,
+        commit_sha: &String,
+        message: &String
+    ) -> Result<String> {
+        Ok("".to_string())
     }
 
     #[cfg(test)]

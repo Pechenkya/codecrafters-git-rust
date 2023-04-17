@@ -50,6 +50,15 @@ fn main() {
         } else {
             println!("Unrecognised 'write-tree' signature!");
         }
+    } else if args[0] == "commit-tree" {
+        if args.len() == 6 && args[2] == "-p" && args[4] == "-m" {
+            match commands::create_commit_with_message(&args[1], &args[3], &args[5]) {
+                Ok(r) => println!("{r}"),
+                Err(err) => println!("{}", err),
+            }
+        } else {
+            println!("Unrecognised 'commit-tree' signature!");
+        }
     } else {
         println!("unknown command: {}", args[0]);
     }
