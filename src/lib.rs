@@ -4,6 +4,7 @@ pub mod commands {
 
     use std::io::prelude::*;
     use std::path::Path;
+    use std::time::SystemTime;
     use flate2::read::ZlibDecoder;
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
@@ -13,8 +14,9 @@ pub mod commands {
     // Hardcoded constants
     const BLOB_MODE: &[u8] = b"100644 ";
     const TREE_MODE: &[u8] = b"40000 ";
-    // const COMMITER_NAME: &[u8] = b"Petro Bondar";
-    // const COMMITER_EMAIL: &[u8] = b"pb@gmail.com ";
+    const COMMITER_NAME: &[u8] = b"Petro Bondar";
+    const COMMITER_EMAIL: &[u8] = b"pb@gmail.com ";
+    const COMMITER_AFTER_STAMP: &[u8] = b"-0700";
 
     /// Command to init git repository in current folder
     pub fn init() -> String {
@@ -240,14 +242,77 @@ pub mod commands {
         Ok(hash)
     }
 
-    /// Recursive function to create subtrees
+    fn get_time_stamp_string() -> Result<String> {
+        Ok(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?.as_secs().to_string())
+    }
+
+    fn append_commiter_data(contents: &mut Vec<u8>, timestamp: &String) {
+        contents.append(&mut COMMITER_NAME.to_vec());
+        contents.push(b' ');
+        contents.push(b'<');
+        contents.append(&mut COMMITER_EMAIL.to_vec());
+        contents.push(b'>');
+        contents.push(b' ');
+        contents.append(&mut timestamp.as_bytes().to_vec());
+        contents.push(b' ');
+        contents.append(&mut COMMITER_AFTER_STAMP.to_vec());
+        contents.push(b'\n');
+    }
+
+    /// Function to create commit from tree
     pub fn create_commit_with_message(
         tree_sha: &String,
-        commit_sha: &String,
+        parent_sha: &String,
         message: &String
     ) -> Result<String> {
-        println!("{}, {}, {}", tree_sha, commit_sha, message);
-        Ok("".to_string())
+        // Variable to store commit text
+        let mut contents: Vec<u8> = Vec::new();
+
+        // Create timestamp
+        let timestamp: String = get_time_stamp_string()?;
+
+        // Add tree sha
+        contents.append(&mut b"tree ".to_vec());
+        contents.append(&mut tree_sha.as_bytes().to_vec());
+        contents.push(b'\n');
+
+        // Add parent sha
+        contents.append(&mut b"parent ".to_vec());
+        contents.append(&mut parent_sha.as_bytes().to_vec());
+        contents.push(b'\n');
+
+        // Add author and commiter (hardcoded using consts)
+        contents.append(&mut b"author ".to_vec());
+        append_commiter_data(&mut contents, &timestamp);
+        contents.append(&mut b"commiter ".to_vec());
+        append_commiter_data(&mut contents, &timestamp);
+
+        // Add message
+        contents.push(b'\n');
+        contents.append(&mut message.as_bytes().to_vec());
+        contents.push(b'\n');
+
+        // Add header to the text
+        let text: Vec<u8> = add_data_prefix("commit", contents);
+
+        // Generate Hash and encode it to hex
+        let hash = hex::encode(Sha1::new().chain_update(text.as_slice()).finalize());
+
+        // Compress data
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(text.as_slice())?;
+        let encoded_text: Vec<u8> = encoder.finish()?;
+
+        // Create path
+        let path_to_save: String = compute_path_from_sha(&hash)?;
+        std::fs::create_dir_all(Path::new(&path_to_save).parent().unwrap())?;
+
+        // Save object
+        let mut obj: fs::File = fs::File::create(path_to_save)?;
+        obj.write_all(encoded_text.as_slice())?;
+
+        // Print hash
+        Ok(hash)
     }
 
     #[cfg(test)]
