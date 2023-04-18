@@ -8,58 +8,66 @@ fn main() {
         return;
     }
 
-    if args[0] == "init" {
-        if args.len() == 1 {
-            println!("{}", commands::init());
-        } else {
-            println!("Unrecognised 'init' signature!");
-        }
-    } else if args[0] == "cat-file" {
-        if args.len() == 3 && args[1] == "-p" {
-            match commands::cat_file_print(&args[2]) {
-                Ok(r) => print!("{r}"),
-                Err(err) => println!("{}", err),
+    match args[0].as_str() {
+        "init" => {
+            if args.len() == 1 {
+                println!("{}", commands::init());
+            } else {
+                println!("Unrecognised 'init' signature!");
             }
-        } else {
-            println!("Unrecognised 'cat-file' signature!");
         }
-    } else if args[0] == "hash-object" {
-        if args.len() == 3 && args[1] == "-w" {
-            match commands::hash_object_write(&args[2]) {
-                Ok(r) => println!("{r}"),
-                Err(err) => println!("{}", err),
+        "cat-file" => {
+            if args.len() == 3 && args[1] == "-p" {
+                match commands::cat_file_print(&args[2]) {
+                    Ok(r) => print!("{r}"),
+                    Err(err) => println!("{}", err),
+                }
+            } else {
+                println!("Unrecognised 'cat-file' signature!");
             }
-        } else {
-            println!("Unrecognised 'hash-object' signature!");
         }
-    } else if args[0] == "ls-tree" {
-        if args.len() == 3 && args[1] == "--name-only" {
-            match commands::read_tree_names(&args[2]) {
-                Ok(r) => println!("{r}"),
-                Err(err) => println!("{}", err),
+        "hash-object" => {
+            if args.len() == 3 && args[1] == "-w" {
+                match commands::hash_object_write(&args[2]) {
+                    Ok(r) => println!("{r}"),
+                    Err(err) => println!("{}", err),
+                }
+            } else {
+                println!("Unrecognised 'hash-object' signature!");
             }
-        } else {
-            println!("Unrecognised 'ls-tree' signature!");
         }
-    } else if args[0] == "write-tree" {
-        if args.len() == 1 {
-            match commands::write_tree() {
-                Ok(r) => println!("{r}"),
-                Err(err) => println!("{}", err),
+        "ls-tree" => {
+            if args.len() == 3 && args[1] == "--name-only" {
+                match commands::read_tree_names(&args[2]) {
+                    Ok(r) => println!("{r}"),
+                    Err(err) => println!("{}", err),
+                }
+            } else {
+                println!("Unrecognised 'ls-tree' signature!");
             }
-        } else {
-            println!("Unrecognised 'write-tree' signature!");
         }
-    } else if args[0] == "commit-tree" {
-        if args.len() == 6 && args[2] == "-p" && args[4] == "-m" {
-            match commands::create_commit_with_message(&args[1], &args[3], &args[5]) {
-                Ok(r) => println!("{r}"),
-                Err(err) => println!("{}", err),
+        "write-tree" => {
+            if args.len() == 1 {
+                match commands::write_tree() {
+                    Ok(r) => println!("{r}"),
+                    Err(err) => println!("{}", err),
+                }
+            } else {
+                println!("Unrecognised 'write-tree' signature!");
             }
-        } else {
-            println!("Unrecognised 'commit-tree' signature!");
         }
-    } else {
-        println!("unknown command: {}", args[0]);
+        "commit-tree" => {
+            if args.len() == 6 && args[2] == "-p" && args[4] == "-m" {
+                match commands::create_commit_with_message(&args[1], &args[3], &args[5]) {
+                    Ok(r) => println!("{r}"),
+                    Err(err) => println!("{}", err),
+                }
+            } else {
+                println!("Unrecognised 'commit-tree' signature!");
+            }
+        }
+        _ => {
+            println!("unknown command: {}", args[0]);
+        }
     }
 }

@@ -15,7 +15,7 @@ pub mod commands {
     const BLOB_MODE: &[u8] = b"100644 ";
     const TREE_MODE: &[u8] = b"40000 ";
     const COMMITER_NAME: &[u8] = b"Petro Bondar";
-    const COMMITER_EMAIL: &[u8] = b"pb@gmail.com ";
+    const COMMITER_EMAIL: &[u8] = b"pb@gmail.com";
     const COMMITER_AFTER_STAMP: &[u8] = b"-0700";
 
     /// Command to init git repository in current folder
