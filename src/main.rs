@@ -66,6 +66,16 @@ fn main() {
                 println!("Unrecognised 'commit-tree' signature!");
             }
         }
+        "clone" => {
+            if args.len() == 3 {
+                match commands::clone_repo(&args[1], &args[2]) {
+                    Ok(r) => println!("{r}"),
+                    Err(err) => println!("{}", err),
+                }
+            } else {
+                println!("Unrecognised 'clone' signature!");
+            }
+        }
         _ => {
             println!("unknown command: {}", args[0]);
         }

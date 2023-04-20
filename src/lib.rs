@@ -1,4 +1,8 @@
+mod pack_processing;
+
 pub mod commands {
+    use crate::*;
+
     use anyhow::{ anyhow, Result };
     use std::{ fs, os::unix::prelude::OsStrExt };
 
@@ -198,7 +202,7 @@ pub mod commands {
         // Get folder entries and sort them
         let mut entries: Vec<_> = fs
             ::read_dir(folder_path)?
-            .map(|e| e.unwrap())
+            .filter_map(|e| e.ok())
             .collect();
         entries.sort_by_key(|dir| { dir.file_name() });
 
@@ -298,9 +302,46 @@ pub mod commands {
         Ok(hash)
     }
 
+    pub fn clone_repo<T: AsRef<Path>>(repo_url: &str, _folder_path: &T) -> Result<String> {
+        // Request and parse references
+        let response_body: String = pack_processing::request_refs(repo_url)?;
+        let (refs_response, aux_resp): (
+            Vec<(String, String)>,
+            String,
+        ) = pack_processing::parse_refs_resp_and_check(&response_body)?;
+
+        // Debug
+        println!("{:?}\n {}", refs_response, aux_resp);
+
+        // Check if we can request packs
+        if
+            !(
+                aux_resp.contains("allow-tip-sha1-in-want") ||
+                aux_resp.contains("allow-reachable-sha1-in-want")
+            )
+        {
+            return Err(anyhow!("Server does not advertise required capabilities!"));
+        }
+
+        Ok("".to_string())
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[allow(dead_code)]
+        const TEST_REPO_1: &str = "https://github.com/codecrafters-io/git-sample-1";
+        #[allow(dead_code)]
+        const TEST_REPO_2: &str = "https://github.com/codecrafters-io/git-sample-2";
+        #[allow(dead_code)]
+        const TEST_REPO_3: &str = "https://github.com/codecrafters-io/git-sample-3";
+
+        #[test]
+        fn send_request_to_clone() {
+            let res = clone_repo(&TEST_REPO_1.to_string(), &"/tmp/clone_repo_test".to_string());
+            assert!(res.is_ok());
+        }
 
         #[test]
         fn check_sha_convert() {
