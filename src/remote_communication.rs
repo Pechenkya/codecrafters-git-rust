@@ -1,15 +1,14 @@
 use anyhow::{ anyhow, Result, Ok };
+use reqwest::blocking::{ Response, Client, self };
 use std::io::prelude::*;
 
 /// Request pack refs from remote repo
 pub fn request_refs(repo_url: &str) -> Result<String> {
     // Send blocking request to upload pack
-    let mut res = reqwest::blocking::get(
-        repo_url.to_owned() + "/info/refs?service=git-upload-pack"
-    )?;
+    let mut res = blocking::get(repo_url.to_owned() + "/info/refs?service=git-upload-pack")?;
 
     // Check if we get correct response
-    if res.status().to_string() != "200 OK" {
+    if res.status() != 200 {
         return Err(anyhow!("Cannot reach: {}", res.status()));
     }
     if res.headers()["content-type"] != "application/x-git-upload-pack-advertisement" {
@@ -78,16 +77,45 @@ pub fn parse_refs_resp_and_check(text: &str) -> Result<(Vec<(String, String)>, S
     }
 }
 
-#[allow(dead_code)]
-#[allow(unused_variables)]
-/// Create request to receive packs
-pub fn create_pack_requests(refs: &Vec<(String, String)>) -> Result<String> {
+/// Create request body to receive packs
+pub fn create_pack_request_body(refs: &[(String, String)]) -> Result<String> {
     let mut want_list: Vec<String> = Vec::new();
 
     // Generate "want" lines
-    for (sha, name) in refs {
-        want_list.push(format!("want {}", sha));
+    // Add capabilitiy 'multi_ack' to the first ref to allow server find last diff
+    let first_line = format!("want {} multi_ack\n", refs[0].0);
+    want_list.push(format!("{:04x}{}", first_line.len() + 4, first_line));
+    for (sha, _name) in &refs[1..] {
+        let want_line = format!("want {}\n", sha);
+        want_list.push(format!("{:04x}{}", want_line.len() + 4, want_line));
     }
+    // Final lines fixed
+    want_list.push("0000".to_string());
+    want_list.push(format!("{:04x}done\n", 9));
 
-    Ok("".to_string())
+    Ok(want_list.concat())
+}
+
+/// Send request to recieve packs (return binary returned from the HOST)
+pub fn send_request_for_packs(repo_url: &str, request_body: &String) -> Result<Vec<u8>> {
+    let request_url: String = format!("{}/git-upload-pack", repo_url);
+
+    let client = Client::new();
+    let mut res: Response = client
+        .post(request_url)
+        .header("content-type", "application/x-git-upload-pack-request")
+        .body(request_body.to_owned())
+        .send()?;
+
+    // Read response body
+    let mut body: Vec<u8> = Vec::new();
+    res.read_to_end(&mut body)?;
+
+    // Debug
+    // println!("Status: {}", res.status());
+    // println!("Headers:\n{:#?}", res.headers());
+    // println!("Body:\n{:?}", String::from_utf8_lossy(&body));
+
+    // Return PACK body
+    Ok(body[8..].to_vec())
 }

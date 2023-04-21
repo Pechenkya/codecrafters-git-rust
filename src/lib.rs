@@ -1,4 +1,4 @@
-mod pack_processing;
+mod remote_communication;
 
 pub mod commands {
     use crate::*;
@@ -304,11 +304,11 @@ pub mod commands {
 
     pub fn clone_repo<T: AsRef<Path>>(repo_url: &str, _folder_path: &T) -> Result<String> {
         // Request and parse references
-        let response_body: String = pack_processing::request_refs(repo_url)?;
+        let response_body: String = remote_communication::request_refs(repo_url)?;
         let (refs_response, aux_resp): (
             Vec<(String, String)>,
             String,
-        ) = pack_processing::parse_refs_resp_and_check(&response_body)?;
+        ) = remote_communication::parse_refs_resp_and_check(&response_body)?;
 
         // Debug
         println!("{:?}\n {}", refs_response, aux_resp);
@@ -322,6 +322,19 @@ pub mod commands {
         {
             return Err(anyhow!("Server does not advertise required capabilities!"));
         }
+
+        // Create body for a pack request
+        let request_body: String = remote_communication::create_pack_request_body(&refs_response)?;
+        // Debug
+        // println!("{request_body}");
+
+        // contents: [PACK][4 bytes - version][4 bytes - object amount][..heart..][20 bytes - SHA1 checksum]
+        let pack_binary: Vec<u8> = remote_communication::send_request_for_packs(
+            repo_url,
+            &request_body
+        )?;
+        // Debug
+        println!("{pack_binary:?}");
 
         Ok("".to_string())
     }
