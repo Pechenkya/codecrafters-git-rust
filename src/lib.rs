@@ -1,7 +1,7 @@
-mod remote_communication;
+mod remote_utility;
 
 pub mod commands {
-    use crate::*;
+    use crate::remote_utility::*;
 
     use anyhow::{ anyhow, Result };
     use std::{ fs, os::unix::prelude::OsStrExt };
@@ -302,7 +302,10 @@ pub mod commands {
         Ok(hash)
     }
 
-    pub fn clone_repo<T: AsRef<Path>>(repo_url: &str, _folder_path: &T) -> Result<String> {
+    pub fn clone_repo<T: AsRef<Path> + std::fmt::Display>(
+        repo_url: &str,
+        folder_path: &T
+    ) -> Result<String> {
         // Request and parse references
         let response_body: String = remote_communication::request_refs(repo_url)?;
         let (refs_response, aux_resp): (
@@ -334,9 +337,11 @@ pub mod commands {
             &request_body
         )?;
         // Debug
-        println!("{pack_binary:?}");
+        // println!("{pack_binary:?}");
 
-        Ok("".to_string())
+        let heart: Vec<u8> = pack_processing::validate_and_get_heart(&pack_binary)?;
+
+        Ok(format!("Repository '{repo_url}' succesfully cloned into '{folder_path}'"))
     }
 
     #[cfg(test)]
