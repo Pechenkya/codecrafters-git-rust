@@ -1,26 +1,21 @@
 mod remote_utility;
+mod utility;
 
 pub mod commands {
     use crate::remote_utility::*;
+    use crate::utility::*;
 
     use anyhow::{ anyhow, Result };
     use std::{ fs, os::unix::prelude::OsStrExt };
 
     use std::io::prelude::*;
     use std::path::Path;
-    use std::time::SystemTime;
     use flate2::read::ZlibDecoder;
-    use flate2::write::ZlibEncoder;
-    use flate2::Compression;
-    use sha1::{ Sha1, Digest };
     use hex;
 
     // Hardcoded constants
     const BLOB_MODE: &[u8] = b"100644 ";
     const TREE_MODE: &[u8] = b"40000 ";
-    const COMMITER_NAME: &[u8] = b"Petro Bondar";
-    const COMMITER_EMAIL: &[u8] = b"pb@gmail.com";
-    const COMMITER_AFTER_STAMP: &[u8] = b"-0700";
 
     /// Command to init git repository in current folder
     pub fn init() -> String {
@@ -31,59 +26,10 @@ pub mod commands {
         "Initialized git directory".to_string()
     }
 
-    fn find_root_folder() -> Result<String> {
-        let mut prefix_path = String::from("./");
-        // Check depth 256 for a .git folder
-        for _ in 0..256 {
-            if Path::new(&format!("{prefix_path}.git")).is_dir() {
-                return Ok(prefix_path);
-            }
-            prefix_path += "../";
-        }
-
-        Err(anyhow!("Cannot find .git folder!"))
-    }
-
-    fn compute_path_from_sha(sha: &String) -> Result<String> {
-        let path = find_root_folder()? + ".git/objects/" + &sha[0..2] + "/" + &sha[2..sha.len()];
-        Ok(path)
-    }
-
-    fn add_data_prefix(prefix: &str, mut text: Vec<u8>) -> Vec<u8> {
-        let mut result = prefix.as_bytes().to_vec();
-        result.push(b' ');
-        result.append(&mut text.len().to_string().into_bytes());
-        result.push(b'\0');
-        result.append(&mut text);
-        result
-    }
-
-    /// Moves in data and writes it into corresponding object
-    /// Returns SHA for object
-    fn write_data(data: Vec<u8>) -> Result<String> {
-        // Generate Hash and encode it to hex
-        let hash = hex::encode(Sha1::new().chain_update(data.as_slice()).finalize());
-
-        // Compress data
-        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder.write_all(data.as_slice())?;
-        let encoded_text: Vec<u8> = encoder.finish()?;
-
-        // Create path
-        let path_to_save: String = compute_path_from_sha(&hash)?;
-        std::fs::create_dir_all(Path::new(&path_to_save).parent().unwrap())?;
-
-        // Save object
-        let mut obj: fs::File = fs::File::create(path_to_save)?;
-        obj.write_all(encoded_text.as_slice())?;
-
-        Ok(hash)
-    }
-
     /// Open file and print binary data in pretty way
     pub fn cat_file_print(sha: &String) -> Result<String> {
         // Compute path to blob
-        let path: String = compute_path_from_sha(sha)?;
+        let path: String = fs_utility::compute_path_from_sha(sha)?;
 
         // Read binary
         let bytes: Vec<u8> = match fs::read(path) {
@@ -116,10 +62,10 @@ pub mod commands {
     pub fn hash_object_write<T: AsRef<Path>>(file_path: &T) -> Result<String> {
         // Get data from file and format it according to git rules
         let bytes: Vec<u8> = fs::read(file_path)?;
-        let text: Vec<u8> = add_data_prefix("blob", bytes);
+        let text: Vec<u8> = other_util::add_data_prefix("blob", bytes);
 
         // Write data into object
-        let hash = write_data(text)?;
+        let hash = fs_utility::write_data(text)?;
 
         // Print hash
         Ok(hash)
@@ -128,7 +74,7 @@ pub mod commands {
     /// Read a tree object
     pub fn read_tree_names(sha: &String) -> Result<String> {
         // Compute path to object
-        let path: String = compute_path_from_sha(sha)?;
+        let path: String = fs_utility::compute_path_from_sha(sha)?;
 
         // Read binary and decompress data
         let bytes: Vec<u8> = match fs::read(path) {
@@ -193,7 +139,7 @@ pub mod commands {
     /// Create a tree object from a working directory
     pub fn write_tree() -> Result<String> {
         // Find root folder and create tree starting from it
-        let basic_path: String = find_root_folder()?;
+        let basic_path: String = fs_utility::find_root_folder()?;
         write_tree_with_path(&basic_path)
     }
 
@@ -233,30 +179,13 @@ pub mod commands {
         }
 
         // Add header to the text
-        let text: Vec<u8> = add_data_prefix("tree", contents);
+        let text: Vec<u8> = other_util::add_data_prefix("tree", contents);
 
         // Write data into object
-        let hash = write_data(text)?;
+        let hash = fs_utility::write_data(text)?;
 
         // Print hash
         Ok(hash)
-    }
-
-    fn get_time_stamp_string() -> Result<String> {
-        Ok(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?.as_secs().to_string())
-    }
-
-    fn append_commiter_data(contents: &mut Vec<u8>, timestamp: &String) {
-        contents.append(&mut COMMITER_NAME.to_vec());
-        contents.push(b' ');
-        contents.push(b'<');
-        contents.append(&mut COMMITER_EMAIL.to_vec());
-        contents.push(b'>');
-        contents.push(b' ');
-        contents.append(&mut timestamp.as_bytes().to_vec());
-        contents.push(b' ');
-        contents.append(&mut COMMITER_AFTER_STAMP.to_vec());
-        contents.push(b'\n');
     }
 
     /// Function to create commit from tree
@@ -269,7 +198,7 @@ pub mod commands {
         let mut contents: Vec<u8> = Vec::new();
 
         // Create timestamp
-        let timestamp: String = get_time_stamp_string()?;
+        let timestamp: String = other_util::get_time_stamp_string()?;
 
         // Add tree sha
         contents.append(&mut b"tree ".to_vec());
@@ -283,9 +212,9 @@ pub mod commands {
 
         // Add author and commiter (hardcoded using consts)
         contents.append(&mut b"author ".to_vec());
-        append_commiter_data(&mut contents, &timestamp);
+        other_util::append_commiter_data(&mut contents, &timestamp);
         contents.append(&mut b"commiter ".to_vec());
-        append_commiter_data(&mut contents, &timestamp);
+        other_util::append_commiter_data(&mut contents, &timestamp);
 
         // Add message
         contents.push(b'\n');
@@ -293,10 +222,10 @@ pub mod commands {
         contents.push(b'\n');
 
         // Add header to the text
-        let text: Vec<u8> = add_data_prefix("commit", contents);
+        let text: Vec<u8> = other_util::add_data_prefix("commit", contents);
 
         // Write data into object
-        let hash = write_data(text)?;
+        let hash = fs_utility::write_data(text)?;
 
         // Print hash
         Ok(hash)
@@ -332,14 +261,14 @@ pub mod commands {
         // println!("{request_body}");
 
         // contents: [PACK][4 bytes - version][4 bytes - object amount][..heart..][20 bytes - SHA1 checksum]
-        let pack_binary: Vec<u8> = remote_communication::send_request_for_packs(
+        let _pack_binary: Vec<u8> = remote_communication::send_request_for_packs(
             repo_url,
             &request_body
         )?;
         // Debug
         // println!("{pack_binary:?}");
 
-        let heart: Vec<u8> = pack_processing::validate_and_get_heart(&pack_binary)?;
+        // pack_processing::validate_and_get_heart(&pack_binary)?;
 
         Ok(format!("Repository '{repo_url}' succesfully cloned into '{folder_path}'"))
     }
@@ -364,14 +293,14 @@ pub mod commands {
         #[test]
         fn check_sha_convert() {
             let sha = String::from("e673d1b7eaa0aa01b5bc2442d570a765bdaae751");
-            let path = compute_path_from_sha(&sha).unwrap();
+            let path = fs_utility::compute_path_from_sha(&sha).unwrap();
             assert_eq!(path, "./.git/objects/e6/73d1b7eaa0aa01b5bc2442d570a765bdaae751");
         }
 
         #[test]
         fn check_blob_prefix() {
             let contents = "hello world!".as_bytes().to_vec();
-            let res = add_data_prefix("blob", contents);
+            let res = other_util::add_data_prefix("blob", contents);
             assert_eq!(res, "blob 12\0hello world!".as_bytes().to_vec());
         }
     }
