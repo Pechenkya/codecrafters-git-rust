@@ -62,7 +62,7 @@ pub mod commands {
     pub fn hash_object_write<T: AsRef<Path>>(file_path: &T) -> Result<String> {
         // Get data from file and format it according to git rules
         let bytes: Vec<u8> = fs::read(file_path)?;
-        let text: Vec<u8> = other_util::add_data_prefix("blob", bytes);
+        let text: Vec<u8> = other_util::add_data_prefix(b"blob", bytes);
 
         // Write data into object
         let hash = fs_utility::write_data(text)?;
@@ -179,7 +179,7 @@ pub mod commands {
         }
 
         // Add header to the text
-        let text: Vec<u8> = other_util::add_data_prefix("tree", contents);
+        let text: Vec<u8> = other_util::add_data_prefix(b"tree", contents);
 
         // Write data into object
         let hash = fs_utility::write_data(text)?;
@@ -222,7 +222,7 @@ pub mod commands {
         contents.push(b'\n');
 
         // Add header to the text
-        let text: Vec<u8> = other_util::add_data_prefix("commit", contents);
+        let text: Vec<u8> = other_util::add_data_prefix(b"commit", contents);
 
         // Write data into object
         let hash = fs_utility::write_data(text)?;
@@ -269,7 +269,7 @@ pub mod commands {
         // Debug
         // println!("{pack_binary:?}");
 
-        pack_processing::validate_and_get_heart(&pack_binary)?;
+        pack_processing::validate_and_get_heart(pack_binary)?;
 
         Ok(format!("Repository '{repo_url}' succesfully cloned into '{folder_path}'"))
     }
@@ -301,7 +301,7 @@ pub mod commands {
         #[test]
         fn check_blob_prefix() {
             let contents = "hello world!".as_bytes().to_vec();
-            let res = other_util::add_data_prefix("blob", contents);
+            let res = other_util::add_data_prefix(b"blob", contents);
             assert_eq!(res, "blob 12\0hello world!".as_bytes().to_vec());
         }
     }

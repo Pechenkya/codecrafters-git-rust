@@ -6,8 +6,8 @@ const COMMITER_NAME: &[u8] = b"Petro Bondar";
 const COMMITER_EMAIL: &[u8] = b"pb@gmail.com";
 const COMMITER_AFTER_STAMP: &[u8] = b"-0700";
 
-pub fn add_data_prefix(prefix: &str, mut text: Vec<u8>) -> Vec<u8> {
-    let mut result = prefix.as_bytes().to_vec();
+pub fn add_data_prefix(prefix: &[u8], mut text: Vec<u8>) -> Vec<u8> {
+    let mut result = prefix.to_vec();
     result.push(b' ');
     result.append(&mut text.len().to_string().into_bytes());
     result.push(b'\0');
