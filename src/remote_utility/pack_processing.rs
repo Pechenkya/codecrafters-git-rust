@@ -27,7 +27,7 @@ pub enum ParsedObject {
     },
     Delta {
         obj_type: Vec<u8>,
-        hash: String,
+        obj_ref: String,
         delta: Vec<u8>,
     },
     Unsupported(u8),
@@ -68,7 +68,10 @@ pub fn validate_and_get_heart(bytes: Vec<u8>) -> Result<Vec<ParsedObject>> {
             ParsedObject::Unsupported(id) => {
                 return Err(anyhow!("Unsupported object type! ID: {id}"));
             }
-            _ => parsed_objects.push(obj),
+            ParsedObject::Default { .. } => parsed_objects.push(obj),
+            ParsedObject::Delta { obj_type, obj_ref, delta } => {
+                println!("{}: {obj_ref}\n{delta:?}", String::from_utf8(obj_type.clone())?);
+            }
         }
     }
 
@@ -103,9 +106,12 @@ fn parse_object(buff: &mut Bytes) -> Result<ParsedObject> {
 
         Ok(ParsedObject::Default { obj_type, hash, obj_data: decoded_data.to_vec() })
     } else if obj_type_id == 7 {
+        // Get ref to other object
         let hash: String = read_20_bytes_to_string(buff)?;
-        println!("Got here!");
-        Ok(ParsedObject::Delta { obj_type, hash, delta: vec![] })
+        let (consumed_amt, decoded_data) = decompress_all(buff.clone())?;
+        buff.advance(consumed_amt);
+
+        Ok(ParsedObject::Delta { obj_type, obj_ref: hash, delta: decoded_data.to_vec() })
     } else {
         Ok(ParsedObject::Unsupported(obj_type_id))
     }
@@ -145,4 +151,21 @@ fn get_size_and_typeid(buff: &mut Bytes) -> Result<(usize, u8)> {
     }
 
     Ok((size, typeid))
+}
+
+/// Parse delta object
+fn get_delta_size(buff: &mut Bytes) -> usize {
+    // Parse first byte to get start info
+    let mut byte: u8 = consume_byte(buff);
+    let mut size: usize = (byte & 0b01111111_u8) as usize;
+
+    let mut bits_to_shift = 4; // First 4 bits are already taken
+    while (byte & 0b10000000_u8) != 0 {
+        byte = consume_byte(buff);
+        // Take 7 free bits and mark them as occupied
+        size |= ((byte & 0b01111111_u8) as usize) << bits_to_shift;
+        bits_to_shift += 7;
+    }
+
+    size
 }
