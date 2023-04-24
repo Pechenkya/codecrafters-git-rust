@@ -231,6 +231,7 @@ pub mod commands {
         Ok(hash)
     }
 
+    /// Command to clone remote repo <repo_url> into folder <folder_path>
     pub fn clone_repo<T: AsRef<Path> + std::fmt::Display>(
         repo_url: &str,
         folder_path: &T
@@ -261,14 +262,14 @@ pub mod commands {
         // println!("{request_body}");
 
         // contents: [PACK][4 bytes - version][4 bytes - object amount][..heart..][20 bytes - SHA1 checksum]
-        let _pack_binary: Vec<u8> = remote_communication::send_request_for_packs(
+        let pack_binary: Vec<u8> = remote_communication::send_request_for_packs(
             repo_url,
             &request_body
         )?;
         // Debug
         // println!("{pack_binary:?}");
 
-        // pack_processing::validate_and_get_heart(&pack_binary)?;
+        pack_processing::validate_and_get_heart(&pack_binary)?;
 
         Ok(format!("Repository '{repo_url}' succesfully cloned into '{folder_path}'"))
     }
