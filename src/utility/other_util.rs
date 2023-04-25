@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::time::SystemTime;
+use sha1::{ Sha1, Digest };
 
 // Hardcoded constants
 const COMMITER_NAME: &[u8] = b"Petro Bondar";
@@ -30,4 +31,8 @@ pub fn append_commiter_data(contents: &mut Vec<u8>, timestamp: &String) {
     contents.push(b' ');
     contents.append(&mut COMMITER_AFTER_STAMP.to_vec());
     contents.push(b'\n');
+}
+
+pub fn get_hash_from_data(data: &[u8]) -> String {
+    hex::encode(Sha1::new().chain_update(data).finalize())
 }

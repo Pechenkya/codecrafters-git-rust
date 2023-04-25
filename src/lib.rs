@@ -2,7 +2,7 @@ mod remote_utility;
 mod utility;
 
 pub mod commands {
-    use crate::remote_utility::*;
+    use crate::remote_utility::{ *, pack_processing::UnpackedObject };
     use crate::utility::*;
 
     use anyhow::{ anyhow, Result };
@@ -269,7 +269,10 @@ pub mod commands {
         // Debug
         // println!("{pack_binary:?}");
 
-        pack_processing::validate_and_get_heart(pack_binary)?;
+        // Receive all Objects from PACK
+        let objects: Vec<UnpackedObject> = pack_processing::validate_and_get_heart(pack_binary)?;
+        // Debug
+        objects.iter().for_each(|obj| println!("{obj}"));
 
         Ok(format!("Repository '{repo_url}' succesfully cloned into '{folder_path}'"))
     }
@@ -288,6 +291,7 @@ pub mod commands {
         #[test]
         fn send_request_to_clone() {
             let res = clone_repo(&TEST_REPO_1.to_string(), &"/tmp/clone_repo_test".to_string());
+            println!("{:?}", res);
             assert!(res.is_ok());
         }
 

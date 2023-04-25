@@ -4,8 +4,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use sha1::{ Sha1, Digest };
-use hex;
+use crate::utility::other_util::*;
 
 pub fn find_root_folder() -> Result<String> {
     let mut prefix_path = String::from("./");
@@ -29,7 +28,7 @@ pub fn compute_path_from_sha(sha: &String) -> Result<String> {
 /// Returns SHA for object
 pub fn write_data(data: Vec<u8>) -> Result<String> {
     // Generate Hash and encode it to hex
-    let hash = hex::encode(Sha1::new().chain_update(data.as_slice()).finalize());
+    let hash = get_hash_from_data(&data);
 
     // Compress data
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
