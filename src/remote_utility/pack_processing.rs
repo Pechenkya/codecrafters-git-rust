@@ -42,7 +42,6 @@ impl std::fmt::Display for UnpackedObject {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         #[allow(unsafe_code)]
         let buff_string = unsafe { String::from_utf8_unchecked(self.contents.clone()) };
-        println!("Data: {}", buff_string);
         write!(
             f,
             "{} - {}\n{}",
