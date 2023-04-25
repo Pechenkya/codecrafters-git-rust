@@ -1,6 +1,6 @@
 use crate::utility::*;
 
-use anyhow::{ anyhow, Result, Ok };
+use anyhow::{ anyhow, Result };
 use bytes::{ Bytes, Buf };
 use std::{ io::prelude::*, collections::HashMap };
 use flate2::read::ZlibDecoder;
@@ -166,13 +166,13 @@ fn parse_object(buff: &mut Bytes) -> Result<ParsedObject> {
 
 /// Function to consume unary byte from Buff
 fn consume_byte(buff: &mut Bytes) -> u8 {
-    return buff.get_u8();
+    buff.get_u8()
 }
 
 fn read_20_bytes_to_string(buff: &mut Bytes) -> Result<String> {
     let mut tmp_buff: [u8; 20] = [0; 20];
     buff.copy_to_slice(&mut tmp_buff);
-    return Ok(hex::encode(&tmp_buff));
+    Ok(hex::encode(tmp_buff))
 }
 
 fn decompress_all(data: Bytes) -> Result<(usize, Bytes)> {
@@ -226,7 +226,7 @@ fn apply_delta(dlt_buff: &mut Bytes, obj_buff: &[u8], target_size: usize) -> Res
     while !dlt_buff.is_empty() {
         let byte: u8 = consume_byte(dlt_buff);
 
-        // if MSB is 1 -> Go to [Copy mode], else -> Go to [Add mode]
+        // if MSB is 1 -> Go to [Copy mode], else -> Go to [Insert mode]
         if (byte & 0b10000000_u8) != 0 {
             let mut shift: usize = 0;
             let mut amount: usize = 0;

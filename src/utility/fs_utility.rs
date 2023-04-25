@@ -1,10 +1,19 @@
 use anyhow::{ anyhow, Result };
+use std::env;
 use std::fs;
 use std::io::prelude::*;
 use std::path::Path;
 use flate2::write::ZlibEncoder;
+use flate2::read::ZlibDecoder;
 use flate2::Compression;
 use crate::utility::other_util::*;
+
+pub fn create_path_and_move_there<T: AsRef<Path>>(path: &T) -> Result<()> {
+    fs::create_dir_all(path)?;
+    env::set_current_dir(path)?;
+
+    Ok(())
+}
 
 pub fn find_root_folder() -> Result<String> {
     let mut prefix_path = String::from("./");
@@ -22,6 +31,27 @@ pub fn find_root_folder() -> Result<String> {
 pub fn compute_path_from_sha(sha: &String) -> Result<String> {
     let path = find_root_folder()? + ".git/objects/" + &sha[0..2] + "/" + &sha[2..sha.len()];
     Ok(path)
+}
+
+/// Receive decompressed binary data from object
+pub fn read_data_decompressed(sha: &String) -> Result<Vec<u8>> {
+    // Compute path to blob
+    let path: String = compute_path_from_sha(sha)?;
+
+    // Read binary
+    let bytes: Vec<u8> = match fs::read(path) {
+        Ok(data) => data,
+        Err(_) => {
+            return Err(anyhow!("Object {} is not found", sha));
+        }
+    };
+
+    // Decompress data and read it to string
+    let mut decoder = ZlibDecoder::new(bytes.as_slice());
+    let mut bytes_decoded: Vec<u8> = Vec::new();
+    decoder.read_to_end(&mut bytes_decoded)?;
+
+    Ok(bytes_decoded)
 }
 
 /// Moves in data and writes it into corresponding object

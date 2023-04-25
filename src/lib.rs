@@ -1,16 +1,15 @@
 mod remote_utility;
 mod utility;
+mod checkout;
 
 pub mod commands {
     use crate::remote_utility::{ *, pack_processing::UnpackedObject };
     use crate::utility::*;
+    use crate::checkout::*;
 
     use anyhow::{ anyhow, Result };
     use std::{ fs, os::unix::prelude::OsStrExt };
-
-    use std::io::prelude::*;
     use std::path::Path;
-    use flate2::read::ZlibDecoder;
     use hex;
 
     // Hardcoded constants
@@ -28,21 +27,8 @@ pub mod commands {
 
     /// Open file and print binary data in pretty way
     pub fn cat_file_print(sha: &String) -> Result<String> {
-        // Compute path to blob
-        let path: String = fs_utility::compute_path_from_sha(sha)?;
-
-        // Read binary
-        let bytes: Vec<u8> = match fs::read(path) {
-            Ok(data) => data,
-            Err(_) => {
-                return Err(anyhow!("Object {} is not found", sha));
-            }
-        };
-
-        // Decompress data and read it to string
-        let mut decoder = ZlibDecoder::new(bytes.as_slice());
-        let mut buff_string = String::new();
-        decoder.read_to_string(&mut buff_string)?;
+        // Read object data
+        let buff_string: String = String::from_utf8(fs_utility::read_data_decompressed(sha)?)?;
 
         // Divide data (header, text)
         if let Some((header, data)) = buff_string.split_once('\0') {
@@ -73,67 +59,16 @@ pub mod commands {
 
     /// Read a tree object
     pub fn read_tree_names(sha: &String) -> Result<String> {
-        // Compute path to object
-        let path: String = fs_utility::compute_path_from_sha(sha)?;
-
-        // Read binary and decompress data
-        let bytes: Vec<u8> = match fs::read(path) {
-            Ok(data) => data,
-            Err(_) => {
-                return Err(anyhow!("Object {} is not found", sha));
-            }
-        };
-        let mut decoder = ZlibDecoder::new(bytes.as_slice());
-        let mut bytes_decoded: Vec<u8> = Vec::new();
-        decoder.read_to_end(&mut bytes_decoded)?;
+        // Read data from object
+        let bytes_decoded: Vec<u8> = fs_utility::read_data_decompressed(sha)?;
 
         // Parse text and extract filenames
-        let result: Vec<_> = parse_tree(&bytes_decoded)?
+        let result: Vec<_> = other_util
+            ::parse_tree(&bytes_decoded)?
             .into_iter()
             .map(|obj| obj.0)
             .collect();
         Ok(result.join("\n"))
-    }
-
-    /// Returns tuples (<file name>, <mode>, <SHA-1>) from correct tree object
-    fn parse_tree(binary: &[u8]) -> Result<Vec<(String, String, String)>> {
-        // Convert to string and divide it into blocks
-        #[allow(unsafe_code)]
-        let buff_string = unsafe { String::from_utf8_unchecked(binary.to_vec()) };
-        let (header, mut text) = buff_string
-            .split_once('\0')
-            .ok_or(anyhow!("Cannot separate header!"))?;
-
-        // If header block is for correct tree -> parse text to find tuples (<file name>, <mode>, <SHA-1>)
-        let mut contents: Vec<(String, String, String)> = Vec::new();
-        if let ("tree", _tree_size) = header.split_once(' ').ok_or(anyhow!("Not a tree type!"))? {
-            // Simple parse with unchecked string
-            while !text.is_empty() {
-                // Check if struct is correct and we can extract mode
-                if let Some((_mode, rest)) = text.split_once(' ') {
-                    // Extract filename
-                    let (file_name, rest) = rest
-                        .split_once('\0')
-                        .ok_or(anyhow!("Cannot separate file name!"))?;
-
-                    // Extract SHA-1
-                    let (_sha, rem) = rest.split_at(20);
-                    text = rem;
-
-                    // Add content
-                    contents.push((file_name.to_string(), _mode.to_string(), hex::encode(_sha)));
-
-                    // Debug log
-                    // println!("{_mode} {file_name}: {}", hex::encode(_sha));
-                } else {
-                    return Err(anyhow!("Not a tree object!"));
-                }
-            }
-        } else {
-            return Err(anyhow!("Not a tree object!"));
-        }
-
-        Ok(contents)
     }
 
     /// Create a tree object from a working directory
@@ -244,7 +179,7 @@ pub mod commands {
         ) = remote_communication::parse_refs_resp_and_check(&response_body)?;
 
         // Debug
-        println!("{:?}\n {}", refs_response, aux_resp);
+        // println!("{:?}\n {}", refs_response, aux_resp);
 
         // Check if we can request packs
         if
@@ -272,7 +207,21 @@ pub mod commands {
         // Receive all Objects from PACK
         let objects: Vec<UnpackedObject> = pack_processing::validate_and_get_heart(pack_binary)?;
         // Debug
-        objects.iter().for_each(|obj| println!("{obj}"));
+        // objects.iter().for_each(|obj| println!("{obj}"));
+
+        //
+        fs_utility::create_path_and_move_there(folder_path)?;
+        init();
+
+        // Write all objects
+        for UnpackedObject { obj_type, contents, .. } in objects {
+            let text: Vec<u8> = other_util::add_data_prefix(obj_type.as_slice(), contents);
+            fs_utility::write_data(text)?;
+        }
+
+        // Checkout HEAD
+        write_refs(&refs_response)?;
+        checkout_head()?;
 
         Ok(format!("Repository '{repo_url}' succesfully cloned into '{folder_path}'"))
     }
