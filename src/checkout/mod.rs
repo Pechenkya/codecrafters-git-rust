@@ -1,7 +1,7 @@
 use crate::utility::fs_utility::*;
 use crate::utility::other_util::*;
 
-use anyhow::{ anyhow, Result };
+use anyhow::{ anyhow, bail, Result };
 use std::{ fs, path::Path };
 use std::io::prelude::*;
 
@@ -30,7 +30,7 @@ pub fn checkout_head() -> Result<()> {
     let bytes: Vec<u8> = match fs::read(HEAD_PATH) {
         Ok(data) => data,
         Err(_) => {
-            return Err(anyhow!("Cannot open '{}'", HEAD_PATH));
+            bail!("Cannot open '{}'", HEAD_PATH);
         }
     };
     let head_contentents: String = String::from_utf8(bytes)?;
@@ -42,7 +42,7 @@ pub fn checkout_head() -> Result<()> {
         let bytes: Vec<u8> = match fs::read(format!(".git/{additional_path}")) {
             Ok(data) => data,
             Err(_) => {
-                return Err(anyhow!("Cannot open '{}'", additional_path));
+                bail!("Cannot open '{}'", additional_path);
             }
         };
         String::from_utf8(bytes)?
@@ -58,21 +58,21 @@ pub fn checkout_head() -> Result<()> {
     let (tree_data, _) = commit_contents.split_once('\n').ok_or(anyhow!("Cannot parse commit!"))?;
     let (obj_type, tree_hash) = tree_data.split_once(' ').ok_or(anyhow!("Cannot parse commit!"))?;
     if obj_type != "tree" {
-        return Err(anyhow!("Incorrect commit object structure!"));
+        bail!("Incorrect commit object structure!");
     }
     // println!("tree: {tree_hash}");
 
     let basic_path: String = String::from(".");
-    checkout_tree(&tree_hash.to_string(), basic_path)
+    checkout_tree(tree_hash, basic_path)
 }
 
 /// Checkout to full tree object
-fn checkout_tree(tree_hash: &String, path: String) -> Result<()> {
+fn checkout_tree(tree_hash: &str, path: String) -> Result<()> {
     // Create folder if it's missing
     fs::create_dir_all(&path)?;
 
     // Read data from tree object
-    let bytes_decoded: Vec<u8> = read_data_decompressed(&tree_hash.to_string())?;
+    let bytes_decoded: Vec<u8> = read_data_decompressed(tree_hash)?;
 
     // Parse tree
     for (filename, _mode, sha) in parse_tree(&bytes_decoded)? {
@@ -92,7 +92,7 @@ fn checkout_tree(tree_hash: &String, path: String) -> Result<()> {
             let mut obj: fs::File = fs::File::create(format!("{path}/{filename}"))?;
             obj.write_all(binary)?;
         } else {
-            return Err(anyhow!("Checkout wasn't successfull, wrong header!"));
+            bail!("Checkout wasn't successfull, wrong header!");
         }
     }
 

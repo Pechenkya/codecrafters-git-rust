@@ -1,3 +1,4 @@
+use anyhow::Context;
 use anyhow::{ anyhow, Result };
 use std::env;
 use std::fs;
@@ -28,23 +29,18 @@ pub fn find_root_folder() -> Result<String> {
     Err(anyhow!("Cannot find .git folder!"))
 }
 
-pub fn compute_path_from_sha(sha: &String) -> Result<String> {
-    let path = find_root_folder()? + ".git/objects/" + &sha[0..2] + "/" + &sha[2..sha.len()];
+pub fn compute_path_from_sha(sha: &str) -> Result<String> {
+    let path = find_root_folder()? + ".git/objects/" + &sha[..2] + "/" + &sha[2..sha.len()];
     Ok(path)
 }
 
 /// Receive decompressed binary data from object
-pub fn read_data_decompressed(sha: &String) -> Result<Vec<u8>> {
+pub fn read_data_decompressed(sha: &str) -> Result<Vec<u8>> {
     // Compute path to blob
     let path: String = compute_path_from_sha(sha)?;
 
     // Read binary
-    let bytes: Vec<u8> = match fs::read(path) {
-        Ok(data) => data,
-        Err(_) => {
-            return Err(anyhow!("Object {} is not found", sha));
-        }
-    };
+    let bytes: Vec<u8> = fs::read(path).with_context(|| format!("Object {} is not found", sha))?;
 
     // Decompress data and read it to string
     let mut decoder = ZlibDecoder::new(bytes.as_slice());
@@ -67,7 +63,9 @@ pub fn write_data(data: Vec<u8>) -> Result<String> {
 
     // Create path
     let path_to_save: String = compute_path_from_sha(&hash)?;
-    std::fs::create_dir_all(Path::new(&path_to_save).parent().unwrap())?;
+    std::fs::create_dir_all(
+        Path::new(&path_to_save).parent().ok_or(anyhow!("Corrupted file path"))?
+    )?;
 
     // Save object
     let mut obj: fs::File = fs::File::create(path_to_save)?;

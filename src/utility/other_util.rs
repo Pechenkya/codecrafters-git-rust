@@ -1,4 +1,4 @@
-use anyhow::{ anyhow, Result };
+use anyhow::{ anyhow, bail, Result };
 use std::time::SystemTime;
 use sha1::{ Sha1, Digest };
 
@@ -20,7 +20,7 @@ pub fn get_time_stamp_string() -> Result<String> {
     Ok(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?.as_secs().to_string())
 }
 
-pub fn append_commiter_data(contents: &mut Vec<u8>, timestamp: &String) {
+pub fn append_committer_data(contents: &mut Vec<u8>, timestamp: &str) {
     contents.append(&mut COMMITER_NAME.to_vec());
     contents.push(b' ');
     contents.push(b'<');
@@ -52,27 +52,27 @@ pub fn parse_tree(binary: &[u8]) -> Result<Vec<(String, String, String)>> {
         // Simple parse with unchecked string
         while !text.is_empty() {
             // Check if struct is correct and we can extract mode
-            if let Some((_mode, rest)) = text.split_once(' ') {
+            if let Some((mode, rest)) = text.split_once(' ') {
                 // Extract filename
                 let (file_name, rest) = rest
                     .split_once('\0')
                     .ok_or(anyhow!("Cannot separate file name!"))?;
 
                 // Extract SHA-1
-                let (_sha, rem) = rest.split_at(20);
+                let (sha, rem) = rest.split_at(20);
                 text = rem;
 
                 // Add content
-                contents.push((file_name.to_string(), _mode.to_string(), hex::encode(_sha)));
+                contents.push((file_name.to_string(), mode.to_string(), hex::encode(sha)));
 
                 // Debug log
                 // println!("{_mode} {file_name}: {}", hex::encode(_sha));
             } else {
-                return Err(anyhow!("Not a tree object!"));
+                bail!("Not a tree object!");
             }
         }
     } else {
-        return Err(anyhow!("Not a tree object!"));
+        bail!("Not a tree object!");
     }
 
     Ok(contents)

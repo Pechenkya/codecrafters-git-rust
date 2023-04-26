@@ -7,7 +7,7 @@ pub mod commands {
     use crate::utility::*;
     use crate::checkout::*;
 
-    use anyhow::{ anyhow, Result };
+    use anyhow::{ anyhow, bail, Result };
     use std::{ fs, os::unix::prelude::OsStrExt };
     use std::path::Path;
     use hex;
@@ -25,7 +25,7 @@ pub mod commands {
     }
 
     /// Open file and print binary data in pretty way
-    pub fn cat_file_print(sha: &String) -> Result<String> {
+    pub fn cat_file_print(sha: &str) -> Result<String> {
         // Read object data
         let buff_string: String = String::from_utf8(fs_utility::read_data_decompressed(sha)?)?;
 
@@ -57,7 +57,7 @@ pub mod commands {
     }
 
     /// Read a tree object
-    pub fn read_tree_names(sha: &String) -> Result<String> {
+    pub fn read_tree_names(sha: &str) -> Result<String> {
         // Read data from object
         let bytes_decoded: Vec<u8> = fs_utility::read_data_decompressed(sha)?;
 
@@ -92,7 +92,7 @@ pub mod commands {
         // Go trough dir entries
         for entry in entries {
             let e_path = entry.path();
-            let file_name = e_path.file_name().unwrap();
+            let file_name = e_path.file_name().ok_or(anyhow!("Corrupted filename!"))?;
             if e_path.is_dir() {
                 if e_path.ends_with(".git") {
                     continue; // TODO: Parse .gitignore?
@@ -124,9 +124,9 @@ pub mod commands {
 
     /// Function to create commit from tree
     pub fn create_commit_with_message(
-        tree_sha: &String,
-        parent_sha: &String,
-        message: &String
+        tree_sha: &str,
+        parent_sha: &str,
+        message: &str
     ) -> Result<String> {
         // Variable to store commit text
         let mut contents: Vec<u8> = Vec::new();
@@ -144,11 +144,11 @@ pub mod commands {
         contents.append(&mut parent_sha.as_bytes().to_vec());
         contents.push(b'\n');
 
-        // Add author and commiter (hardcoded using consts)
+        // Add author and committer (hardcoded using consts)
         contents.append(&mut b"author ".to_vec());
-        other_util::append_commiter_data(&mut contents, &timestamp);
-        contents.append(&mut b"commiter ".to_vec());
-        other_util::append_commiter_data(&mut contents, &timestamp);
+        other_util::append_committer_data(&mut contents, &timestamp);
+        contents.append(&mut b"committer ".to_vec());
+        other_util::append_committer_data(&mut contents, &timestamp);
 
         // Add message
         contents.push(b'\n');
@@ -187,7 +187,7 @@ pub mod commands {
                 aux_resp.contains("allow-reachable-sha1-in-want")
             )
         {
-            return Err(anyhow!("Server does not advertise required capabilities!"));
+            bail!("Server does not advertise required capabilities!");
         }
 
         // Create body for a pack request
@@ -208,7 +208,7 @@ pub mod commands {
         // Debug
         // objects.iter().for_each(|obj| println!("{obj}"));
 
-        //
+        // Initialize repo
         fs_utility::create_path_and_move_there(folder_path)?;
         init()?;
 
@@ -238,7 +238,8 @@ pub mod commands {
 
         #[test]
         fn send_request_to_clone() {
-            let res = clone_repo(&TEST_REPO_2.to_string(), &"/tmp/clone_repo_test".to_string());
+            fs::remove_dir_all("/tmp/clone_repo_test").unwrap();
+            let res = clone_repo(&TEST_REPO_3.to_string(), &"/tmp/clone_repo_test".to_string());
             println!("{:?}", res);
             assert!(res.is_ok());
         }

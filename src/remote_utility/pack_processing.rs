@@ -1,6 +1,6 @@
 use crate::utility::*;
 
-use anyhow::{ anyhow, Result };
+use anyhow::{ anyhow, bail, Result };
 use bytes::{ Bytes, Buf };
 use std::{ io::prelude::*, collections::HashMap };
 use flate2::read::ZlibDecoder;
@@ -45,7 +45,7 @@ impl std::fmt::Display for UnpackedObject {
         write!(
             f,
             "{} - {}\n{}",
-            String::from_utf8(self.obj_type.clone()).unwrap(),
+            String::from_utf8(self.obj_type.clone()).unwrap_or("Corrupted text".to_string()),
             self.hash,
             buff_string
         )
@@ -56,7 +56,7 @@ impl std::fmt::Display for UnpackedObject {
 pub fn validate_and_get_heart(bytes: Vec<u8>) -> Result<Vec<UnpackedObject>> {
     // Check PACK signature
     if &bytes[..4] != b"PACK" {
-        return Err(anyhow!("Incorrect PACK structure"));
+        bail!("Incorrect PACK structure");
     }
 
     // Get version (next 4 bytes), current implementation supports version 0002
@@ -64,13 +64,13 @@ pub fn validate_and_get_heart(bytes: Vec<u8>) -> Result<Vec<UnpackedObject>> {
     // println!("Version: {_version}");
 
     // Get object count (next 4 bytes)
-    let object_amount = u32::from_be_bytes(bytes[8..12].try_into()?);
-    // println!("Object amount: {object_amount}");
+    let object_number = u32::from_be_bytes(bytes[8..12].try_into()?);
+    // println!("Object number: {object_number}");
 
     // Compare Checksum
     let checksum = other_util::get_hash_from_data(&bytes[..bytes.len() - 20]);
     if checksum != hex::encode(&bytes[bytes.len() - 20..]) {
-        return Err(anyhow!("CheckSum is not correct!"));
+        bail!("CheckSum is not correct!");
     }
 
     // Continue wotking through Bytes iterator
@@ -79,11 +79,11 @@ pub fn validate_and_get_heart(bytes: Vec<u8>) -> Result<Vec<UnpackedObject>> {
     let mut unpacked_objects: Vec<UnpackedObject> = Vec::new();
     let mut ref_to_id: HashMap<String, usize> = HashMap::new();
     // Go through all objects in PACK
-    for _obj_id in 0..object_amount {
+    for _obj_id in 0..object_number {
         let obj: ParsedObject = parse_object(&mut buff)?;
         match obj {
             ParsedObject::Unsupported(id) => {
-                return Err(anyhow!("Unsupported object type! ID: {id}"));
+                bail!("Unsupported object type! ID: {id}");
             }
             ParsedObject::Default { obj_type, hash, obj_data } => {
                 ref_to_id.insert(hash.clone(), _obj_id as usize);
@@ -153,7 +153,7 @@ fn parse_object(buff: &mut Bytes) -> Result<ParsedObject> {
         Ok(ParsedObject::Default { obj_type, hash, obj_data: decoded_data.to_vec() })
     } else if obj_type_id == 7 {
         // Get ref to other object
-        let hash: String = read_20_bytes_to_string(buff)?;
+        let hash: String = read_20_bytes_to_sha(buff)?;
         let (consumed_amt, decoded_data) = decompress_all(buff.clone())?;
         buff.advance(consumed_amt);
 
@@ -168,7 +168,7 @@ fn consume_byte(buff: &mut Bytes) -> u8 {
     buff.get_u8()
 }
 
-fn read_20_bytes_to_string(buff: &mut Bytes) -> Result<String> {
+fn read_20_bytes_to_sha(buff: &mut Bytes) -> Result<String> {
     let mut tmp_buff: [u8; 20] = [0; 20];
     buff.copy_to_slice(&mut tmp_buff);
     Ok(hex::encode(tmp_buff))
@@ -228,7 +228,7 @@ fn apply_delta(dlt_buff: &mut Bytes, obj_buff: &[u8], target_size: usize) -> Res
         // if MSB is 1 -> Go to [Copy mode], else -> Go to [Insert mode]
         if (byte & 0b10000000_u8) != 0 {
             let mut shift: usize = 0;
-            let mut amount: usize = 0;
+            let mut length: usize = 0;
 
             // Go through bits and get copy info
             if (byte & 0b00000001_u8) != 0 {
@@ -244,27 +244,27 @@ fn apply_delta(dlt_buff: &mut Bytes, obj_buff: &[u8], target_size: usize) -> Res
                 shift |= (consume_byte(dlt_buff) as usize) << 24;
             }
             if (byte & 0b00010000_u8) != 0 {
-                amount |= consume_byte(dlt_buff) as usize;
+                length |= consume_byte(dlt_buff) as usize;
             }
             if (byte & 0b00100000_u8) != 0 {
-                amount |= (consume_byte(dlt_buff) as usize) << 8;
+                length |= (consume_byte(dlt_buff) as usize) << 8;
             }
             if (byte & 0b01000000_u8) != 0 {
-                amount |= (consume_byte(dlt_buff) as usize) << 16;
+                length |= (consume_byte(dlt_buff) as usize) << 16;
             }
 
-            res.append(&mut obj_buff[shift..shift + amount].to_vec());
+            res.extend(obj_buff[shift..shift + length].iter());
         } else {
             // Get <byte> bytes and append ot to result buffer
             let mut tmp_buff: Vec<u8> = vec![0; byte as usize];
             dlt_buff.copy_to_slice(&mut tmp_buff);
-            res.append(&mut tmp_buff);
+            res.extend(tmp_buff.iter());
         }
     }
 
     // Compare expected size and real size
     if target_size != res.len() {
-        return Err(anyhow!("Unexpected Target size: {}. Expected: {target_size}", res.len()));
+        bail!("Unexpected Target size: {}. Expected: {target_size}", res.len());
     }
 
     Ok(res)

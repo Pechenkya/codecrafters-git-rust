@@ -1,4 +1,4 @@
-use anyhow::{ anyhow, Result, Ok };
+use anyhow::{ anyhow, bail, Result, Ok };
 use reqwest::blocking::{ Response, Client, self };
 use std::io::prelude::*;
 
@@ -9,10 +9,10 @@ pub fn request_refs(repo_url: &str) -> Result<String> {
 
     // Check if we get correct response
     if res.status() != 200 {
-        return Err(anyhow!("Cannot reach: {}", res.status()));
+        bail!("Cannot reach: {}", res.status());
     }
     if res.headers()["content-type"] != "application/x-git-upload-pack-advertisement" {
-        return Err(anyhow!("Response from host is not valid!"));
+        bail!("Response from host is not valid!");
     }
 
     // Read response body
@@ -43,13 +43,13 @@ pub fn parse_refs_resp_and_check(text: &str) -> Result<(Vec<(String, String)>, S
             !first_five.ends_with('#') &&
             service_resp != "service=git-upload-pack"
         {
-            return Err(anyhow!("Incorrect service response!"));
+            bail!("Incorrect service response!");
         }
 
         // Server must set last line as 0000, so we just check and remove it
         if let Some(_end_line) = pkt_lines.pop() {
             if _end_line != "0000" {
-                return Err(anyhow!("Incorrect response ending!"));
+                bail!("Incorrect response ending!");
             }
 
             // Parse first resp line and remove first 4 response bytes
@@ -79,25 +79,25 @@ pub fn parse_refs_resp_and_check(text: &str) -> Result<(Vec<(String, String)>, S
 
 /// Create request body to receive packs
 pub fn create_pack_request_body(refs: &[(String, String)]) -> Result<String> {
-    let mut want_list: Vec<String> = Vec::new();
+    let mut want_list: String = String::new();
 
     // Generate "want" lines
     // Add capabilitiy 'multi_ack' to the first ref to allow server find last diff
     let first_line = format!("want {} multi_ack\n", refs[0].0);
-    want_list.push(format!("{:04x}{}", first_line.len() + 4, first_line));
+    want_list.push_str(format!("{:04x}{}", first_line.len() + 4, first_line).as_str());
     for (sha, _name) in &refs[1..] {
         let want_line = format!("want {}\n", sha);
-        want_list.push(format!("{:04x}{}", want_line.len() + 4, want_line));
+        want_list.push_str(format!("{:04x}{}", want_line.len() + 4, want_line).as_str());
     }
     // Final lines fixed
-    want_list.push("0000".to_string());
-    want_list.push(format!("{:04x}done\n", 9));
+    want_list.push_str("0000");
+    want_list.push_str(format!("{:04x}done\n", 9).as_str());
 
-    Ok(want_list.concat())
+    Ok(want_list)
 }
 
 /// Send request to recieve packs (return binary returned from the HOST)
-pub fn send_request_for_packs(repo_url: &str, request_body: &String) -> Result<Vec<u8>> {
+pub fn send_request_for_packs(repo_url: &str, request_body: &str) -> Result<Vec<u8>> {
     let request_url: String = format!("{}/git-upload-pack", repo_url);
 
     let client = Client::new();

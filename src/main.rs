@@ -13,74 +13,74 @@ fn main() {
             if args.len() == 1 {
                 match commands::init() {
                     Ok(r) => print!("{r}"),
-                    Err(err) => println!("Error: {}", err),
+                    Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                println!("Unrecognised 'init' signature!");
+                eprintln!("Unrecognised 'init' signature!");
             }
         }
         "cat-file" => {
             if args.len() == 3 && args[1] == "-p" {
                 match commands::cat_file_print(&args[2]) {
                     Ok(r) => print!("{r}"),
-                    Err(err) => println!("Error: {}", err),
+                    Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                println!("Unrecognised 'cat-file' signature!");
+                eprintln!("Unrecognised 'cat-file' signature!");
             }
         }
         "hash-object" => {
             if args.len() == 3 && args[1] == "-w" {
                 match commands::hash_object_write(&args[2]) {
                     Ok(r) => println!("{r}"),
-                    Err(err) => println!("Error: {}", err),
+                    Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                println!("Unrecognised 'hash-object' signature!");
+                eprintln!("Unrecognised 'hash-object' signature!");
             }
         }
         "ls-tree" => {
             if args.len() == 3 && args[1] == "--name-only" {
                 match commands::read_tree_names(&args[2]) {
                     Ok(r) => println!("{r}"),
-                    Err(err) => println!("Error: {}", err),
+                    Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                println!("Unrecognised 'ls-tree' signature!");
+                eprintln!("Unrecognised 'ls-tree' signature!");
             }
         }
         "write-tree" => {
             if args.len() == 1 {
                 match commands::write_tree() {
                     Ok(r) => println!("{r}"),
-                    Err(err) => println!("Error: {}", err),
+                    Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                println!("Unrecognised 'write-tree' signature!");
+                eprintln!("Unrecognised 'write-tree' signature!");
             }
         }
         "commit-tree" => {
             if args.len() == 6 && args[2] == "-p" && args[4] == "-m" {
                 match commands::create_commit_with_message(&args[1], &args[3], &args[5]) {
                     Ok(r) => println!("{r}"),
-                    Err(err) => println!("Error: {}", err),
+                    Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                println!("Unrecognised 'commit-tree' signature!");
+                eprintln!("Unrecognised 'commit-tree' signature!");
             }
         }
         "clone" => {
             if args.len() == 3 {
                 match commands::clone_repo(&args[1], &args[2]) {
                     Ok(r) => println!("{r}"),
-                    Err(err) => println!("Error: {}", err),
+                    Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                println!("Unrecognised 'clone' signature!");
+                eprintln!("Unrecognised 'clone' signature!");
             }
         }
         _ => {
-            println!("unknown command: {}", args[0]);
+            eprintln!("unknown command: {}", args[0]);
         }
     }
 }
