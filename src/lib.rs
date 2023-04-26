@@ -17,12 +17,11 @@ pub mod commands {
     const TREE_MODE: &[u8] = b"40000 ";
 
     /// Command to init git repository in current folder
-    pub fn init() -> String {
-        fs::create_dir(".git").unwrap();
-        fs::create_dir(".git/objects").unwrap();
-        fs::create_dir(".git/refs").unwrap();
-        fs::write(".git/HEAD", "ref: refs/heads/master\n").unwrap();
-        "Initialized git directory".to_string()
+    pub fn init() -> Result<String> {
+        fs::create_dir_all(".git/objects")?;
+        fs::create_dir_all(".git/refs")?;
+        fs::write(".git/HEAD", "ref: refs/heads/master\n")?;
+        Ok("Initialized git directory".to_string())
     }
 
     /// Open file and print binary data in pretty way
@@ -211,7 +210,7 @@ pub mod commands {
 
         //
         fs_utility::create_path_and_move_there(folder_path)?;
-        init();
+        init()?;
 
         // Write all objects
         for UnpackedObject { obj_type, contents, .. } in objects {
@@ -239,7 +238,7 @@ pub mod commands {
 
         #[test]
         fn send_request_to_clone() {
-            let res = clone_repo(&TEST_REPO_1.to_string(), &"/tmp/clone_repo_test".to_string());
+            let res = clone_repo(&TEST_REPO_2.to_string(), &"/tmp/clone_repo_test".to_string());
             println!("{:?}", res);
             assert!(res.is_ok());
         }
