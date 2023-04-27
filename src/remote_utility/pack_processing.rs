@@ -2,9 +2,12 @@ use crate::utility::*;
 
 use anyhow::{ anyhow, bail, Result };
 use bytes::{ Bytes, Buf };
-use std::{ io::prelude::*, collections::HashMap };
+use std::io::prelude::*;
+use std::collections::HashMap;
 use flate2::read::ZlibDecoder;
 // use flate2::write::ZlibEncoder;
+
+const PACK_HEADER_BLOCK_L: usize = 4;
 
 const OBJ_TYPES: [&[u8]; 8] = [
     b"INVALID",
@@ -53,28 +56,33 @@ impl std::fmt::Display for UnpackedObject {
 }
 
 /// Check recieved data structure and return objects
-pub fn validate_and_get_heart(bytes: Vec<u8>) -> Result<Vec<UnpackedObject>> {
-    // Check PACK signature
-    if &bytes[..4] != b"PACK" {
-        bail!("Incorrect PACK structure");
+pub fn validate_and_get_heart(mut bytes: Vec<u8>) -> Result<Vec<UnpackedObject>> {
+    // Separate main part and 20 bytes checksum at the end
+    let sha_bytes = bytes.split_off(bytes.len() - 20);
+    let mut buff: Bytes = Bytes::from(bytes);
+
+    // Compare Checksum
+    let checksum = hex::encode(&sha_bytes);
+    let real_checksum = other_util::get_hash_from_data(&buff);
+    if checksum != real_checksum {
+        bail!("CheckSum is not correct!\nExpected: {checksum}\nActual: {real_checksum}");
     }
 
+    // Check PACK signature
+    if &buff[..PACK_HEADER_BLOCK_L] != b"PACK" {
+        bail!("Incorrect PACK structure");
+    }
+    buff.advance(PACK_HEADER_BLOCK_L);
+
     // Get version (next 4 bytes), current implementation supports version 0002
-    let _version = u32::from_be_bytes(bytes[4..8].try_into()?);
+    let _version = u32::from_be_bytes(buff[..PACK_HEADER_BLOCK_L].try_into()?);
+    buff.advance(PACK_HEADER_BLOCK_L);
     // println!("Version: {_version}");
 
     // Get object count (next 4 bytes)
-    let object_number = u32::from_be_bytes(bytes[8..12].try_into()?);
+    let object_number = u32::from_be_bytes(buff[..PACK_HEADER_BLOCK_L].try_into()?);
+    buff.advance(PACK_HEADER_BLOCK_L);
     // println!("Object number: {object_number}");
-
-    // Compare Checksum
-    let checksum = other_util::get_hash_from_data(&bytes[..bytes.len() - 20]);
-    if checksum != hex::encode(&bytes[bytes.len() - 20..]) {
-        bail!("CheckSum is not correct!");
-    }
-
-    // Continue wotking through Bytes iterator
-    let mut buff: Bytes = Bytes::from(bytes[12..bytes.len() - 20].to_owned());
 
     let mut unpacked_objects: Vec<UnpackedObject> = Vec::new();
     let mut ref_to_id: HashMap<String, usize> = HashMap::new();
@@ -131,7 +139,9 @@ pub fn validate_and_get_heart(bytes: Vec<u8>) -> Result<Vec<UnpackedObject>> {
 /// Parse single object
 fn parse_object(buff: &mut Bytes) -> Result<ParsedObject> {
     let (_obj_size, obj_type_id) = get_size_and_typeid(buff)?;
-    let obj_type: Vec<u8> = OBJ_TYPES[obj_type_id as usize].to_vec();
+    let obj_type: Vec<u8> = OBJ_TYPES.get(obj_type_id as usize)
+        .ok_or(anyhow!("Unexpected type id in PACK: {}", obj_type_id))?
+        .to_vec();
 
     if (1..=4).contains(&obj_type_id) {
         // Try to decompress and drop consumed data
@@ -163,11 +173,6 @@ fn parse_object(buff: &mut Bytes) -> Result<ParsedObject> {
     }
 }
 
-/// Function to consume unary byte from Buff
-fn consume_byte(buff: &mut Bytes) -> u8 {
-    buff.get_u8()
-}
-
 fn read_20_bytes_to_sha(buff: &mut Bytes) -> Result<String> {
     let mut tmp_buff: [u8; 20] = [0; 20];
     buff.copy_to_slice(&mut tmp_buff);
@@ -184,13 +189,13 @@ fn decompress_all(data: Bytes) -> Result<(usize, Bytes)> {
 /// Parse object for size and typeid
 fn get_size_and_typeid(buff: &mut Bytes) -> Result<(usize, u8)> {
     // Parse first byte to get start info
-    let mut byte: u8 = consume_byte(buff);
+    let mut byte: u8 = buff.get_u8();
     let typeid: u8 = (byte & 0b01110000_u8) >> 4;
     let mut size: usize = (byte & 0b00001111_u8) as usize;
 
     let mut bits_to_shift = 4; // First 4 bits are already taken
     while (byte & 0b10000000_u8) != 0 {
-        byte = consume_byte(buff);
+        byte = buff.get_u8();
         // Take 7 free bits and mark them as occupied
         size |= ((byte & 0b01111111_u8) as usize) << bits_to_shift;
         bits_to_shift += 7;
@@ -202,12 +207,12 @@ fn get_size_and_typeid(buff: &mut Bytes) -> Result<(usize, u8)> {
 /// Parse delta object
 fn get_delta_size(buff: &mut Bytes) -> usize {
     // Parse first byte to get start info
-    let mut byte: u8 = consume_byte(buff);
+    let mut byte: u8 = buff.get_u8();
     let mut size: usize = (byte & 0b01111111_u8) as usize;
 
     let mut bits_to_shift = 7; // First 4 bits are already taken
     while (byte & 0b10000000_u8) != 0 {
-        byte = consume_byte(buff);
+        byte = buff.get_u8();
         // Take 7 free bits and mark them as occupied
         size |= ((byte & 0b01111111_u8) as usize) << bits_to_shift;
         bits_to_shift += 7;
@@ -223,7 +228,7 @@ fn apply_delta(dlt_buff: &mut Bytes, obj_buff: &[u8], target_size: usize) -> Res
 
     // Go through all bytes in delta
     while !dlt_buff.is_empty() {
-        let byte: u8 = consume_byte(dlt_buff);
+        let byte: u8 = dlt_buff.get_u8();
 
         // if MSB is 1 -> Go to [Copy mode], else -> Go to [Insert mode]
         if (byte & 0b10000000_u8) != 0 {
@@ -232,25 +237,25 @@ fn apply_delta(dlt_buff: &mut Bytes, obj_buff: &[u8], target_size: usize) -> Res
 
             // Go through bits and get copy info
             if (byte & 0b00000001_u8) != 0 {
-                shift |= consume_byte(dlt_buff) as usize;
+                shift |= dlt_buff.get_u8() as usize;
             }
             if (byte & 0b00000010_u8) != 0 {
-                shift |= (consume_byte(dlt_buff) as usize) << 8;
+                shift |= (dlt_buff.get_u8() as usize) << 8;
             }
             if (byte & 0b00000100_u8) != 0 {
-                shift |= (consume_byte(dlt_buff) as usize) << 16;
+                shift |= (dlt_buff.get_u8() as usize) << 16;
             }
             if (byte & 0b00001000_u8) != 0 {
-                shift |= (consume_byte(dlt_buff) as usize) << 24;
+                shift |= (dlt_buff.get_u8() as usize) << 24;
             }
             if (byte & 0b00010000_u8) != 0 {
-                length |= consume_byte(dlt_buff) as usize;
+                length |= dlt_buff.get_u8() as usize;
             }
             if (byte & 0b00100000_u8) != 0 {
-                length |= (consume_byte(dlt_buff) as usize) << 8;
+                length |= (dlt_buff.get_u8() as usize) << 8;
             }
             if (byte & 0b01000000_u8) != 0 {
-                length |= (consume_byte(dlt_buff) as usize) << 16;
+                length |= (dlt_buff.get_u8() as usize) << 16;
             }
 
             res.extend(obj_buff[shift..shift + length].iter());

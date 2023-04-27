@@ -8,13 +8,13 @@ pub mod commands {
     use crate::checkout::*;
 
     use anyhow::{ anyhow, bail, Result };
-    use std::{ fs, os::unix::prelude::OsStrExt };
+    use std::fs;
     use std::path::Path;
     use hex;
 
     // Hardcoded constants
-    const BLOB_MODE: &[u8] = b"100644 ";
-    const TREE_MODE: &[u8] = b"40000 ";
+    const BLOB_MODE: &str = "100644";
+    const TREE_MODE: &str = "40000";
 
     /// Command to init git repository in current folder
     pub fn init() -> Result<String> {
@@ -92,23 +92,23 @@ pub mod commands {
         // Go trough dir entries
         for entry in entries {
             let e_path = entry.path();
-            let file_name = e_path.file_name().ok_or(anyhow!("Corrupted filename!"))?;
+            let file_name = e_path
+                .file_name()
+                .ok_or(anyhow!("Corrupted filename!"))?
+                .to_str()
+                .ok_or(anyhow!("Corrupted filename!"))?;
             if e_path.is_dir() {
                 if e_path.ends_with(".git") {
                     continue; // TODO: Parse .gitignore?
                 }
 
-                let mut sub_tree_sha: Vec<u8> = hex::decode(write_tree_with_path(&e_path)?)?;
-                contents.append(&mut TREE_MODE.to_vec()); // Add mode prefix
-                contents.append(&mut file_name.as_bytes().to_vec()); // Add file name
-                contents.push(0_u8); // Add NULL char
-                contents.append(&mut sub_tree_sha); // Add tree sha
+                let sub_tree_sha: Vec<u8> = hex::decode(write_tree_with_path(&e_path)?)?;
+                contents.extend(format!("{TREE_MODE} {file_name}\0").bytes());
+                contents.extend(sub_tree_sha.iter()); // Add tree sha
             } else {
-                let mut blob_sha: Vec<u8> = hex::decode(hash_object_write(&e_path)?)?;
-                contents.append(&mut BLOB_MODE.to_vec()); // Add mode prefix
-                contents.append(&mut file_name.as_bytes().to_vec()); // Add file name
-                contents.push(0_u8); // Add NULL char
-                contents.append(&mut blob_sha); // Add blob sha
+                let blob_sha: Vec<u8> = hex::decode(hash_object_write(&e_path)?)?;
+                contents.extend(format!("{BLOB_MODE} {file_name}\0").bytes());
+                contents.extend(blob_sha.iter()); // Add blob sha
             }
         }
 
@@ -135,24 +135,24 @@ pub mod commands {
         let timestamp: String = other_util::get_time_stamp_string()?;
 
         // Add tree sha
-        contents.append(&mut b"tree ".to_vec());
-        contents.append(&mut tree_sha.as_bytes().to_vec());
+        contents.extend("tree ".bytes());
+        contents.extend(tree_sha.bytes());
         contents.push(b'\n');
 
         // Add parent sha
-        contents.append(&mut b"parent ".to_vec());
-        contents.append(&mut parent_sha.as_bytes().to_vec());
+        contents.extend("parent ".bytes());
+        contents.extend(parent_sha.bytes());
         contents.push(b'\n');
 
         // Add author and committer (hardcoded using consts)
-        contents.append(&mut b"author ".to_vec());
+        contents.extend("author ".bytes());
         other_util::append_committer_data(&mut contents, &timestamp);
-        contents.append(&mut b"committer ".to_vec());
+        contents.extend("committer ".bytes());
         other_util::append_committer_data(&mut contents, &timestamp);
 
         // Add message
         contents.push(b'\n');
-        contents.append(&mut message.as_bytes().to_vec());
+        contents.extend(message.bytes());
         contents.push(b'\n');
 
         // Add header to the text

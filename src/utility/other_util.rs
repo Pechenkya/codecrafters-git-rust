@@ -3,9 +3,9 @@ use std::time::SystemTime;
 use sha1::{ Sha1, Digest };
 
 // Hardcoded constants
-const COMMITER_NAME: &[u8] = b"Petro Bondar";
-const COMMITER_EMAIL: &[u8] = b"pb@gmail.com";
-const COMMITER_AFTER_STAMP: &[u8] = b"-0700";
+const COMMITER_NAME: &str = "Petro Bondar";
+const COMMITER_EMAIL: &str = "pb@gmail.com";
+const COMMITER_AFTER_STAMP: &str = "-0700";
 
 pub fn add_data_prefix(prefix: &[u8], mut text: Vec<u8>) -> Vec<u8> {
     let mut result = prefix.to_vec();
@@ -21,16 +21,9 @@ pub fn get_time_stamp_string() -> Result<String> {
 }
 
 pub fn append_committer_data(contents: &mut Vec<u8>, timestamp: &str) {
-    contents.append(&mut COMMITER_NAME.to_vec());
-    contents.push(b' ');
-    contents.push(b'<');
-    contents.append(&mut COMMITER_EMAIL.to_vec());
-    contents.push(b'>');
-    contents.push(b' ');
-    contents.append(&mut timestamp.as_bytes().to_vec());
-    contents.push(b' ');
-    contents.append(&mut COMMITER_AFTER_STAMP.to_vec());
-    contents.push(b'\n');
+    contents.extend(
+        format!("{COMMITER_NAME} <{COMMITER_EMAIL}> {timestamp} {COMMITER_AFTER_STAMP}\n").bytes()
+    );
 }
 
 pub fn get_hash_from_data(data: &[u8]) -> String {
