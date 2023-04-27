@@ -48,7 +48,9 @@ impl std::fmt::Display for UnpackedObject {
         write!(
             f,
             "{} - {}\n{}",
-            String::from_utf8(self.obj_type.clone()).unwrap_or("Corrupted text".to_string()),
+            String::from_utf8(self.obj_type.clone()).unwrap_or_else(|e|
+                format!("Corrupted text: {e}")
+            ),
             self.hash,
             buff_string
         )
@@ -100,7 +102,7 @@ pub fn validate_and_get_heart(mut bytes: Vec<u8>) -> Result<Vec<UnpackedObject>>
             ParsedObject::Delta { obj_type: _ot, obj_ref, delta } => {
                 let obj_id: usize = *ref_to_id
                     .get(&obj_ref)
-                    .ok_or(anyhow!("No such object in list: {}!", obj_ref))?;
+                    .ok_or_else(|| anyhow!("No such object in list: {}!", obj_ref))?;
 
                 // println!("{}: {obj_ref}\n{delta:?}", String::from_utf8(_ot.clone())?);
 
@@ -108,12 +110,10 @@ pub fn validate_and_get_heart(mut bytes: Vec<u8>) -> Result<Vec<UnpackedObject>>
                 let mut dlt_iter: Bytes = Bytes::from(delta);
                 let _: usize = get_delta_size(&mut dlt_iter); // Skip source size
                 let target_size: usize = get_delta_size(&mut dlt_iter);
-                let refered_object_data: Bytes = Bytes::from(
-                    unpacked_objects
-                        .get(obj_id)
-                        .ok_or(anyhow!("Expected to find object {obj_ref} by id {obj_id}"))?
-                        .contents.clone()
-                );
+                let referenced_object = unpacked_objects
+                    .get(obj_id)
+                    .ok_or_else(|| anyhow!("Expected to find object {obj_ref} by id {obj_id}"))?;
+                let refered_object_data: Bytes = Bytes::from(referenced_object.contents.clone());
 
                 // Apply delta and store new object
                 let updated_data: Vec<u8> = apply_delta(
@@ -121,7 +121,7 @@ pub fn validate_and_get_heart(mut bytes: Vec<u8>) -> Result<Vec<UnpackedObject>>
                     &refered_object_data,
                     target_size
                 )?;
-                let obj_type = unpacked_objects.get(obj_id).unwrap().obj_type.clone();
+                let obj_type = referenced_object.obj_type.clone();
 
                 let hash = other_util::get_hash_from_data(
                     other_util::add_data_prefix(&obj_type, updated_data.clone()).as_slice()
@@ -140,7 +140,7 @@ pub fn validate_and_get_heart(mut bytes: Vec<u8>) -> Result<Vec<UnpackedObject>>
 fn parse_object(buff: &mut Bytes) -> Result<ParsedObject> {
     let (_obj_size, obj_type_id) = get_size_and_typeid(buff)?;
     let obj_type: Vec<u8> = OBJ_TYPES.get(obj_type_id as usize)
-        .ok_or(anyhow!("Unexpected type id in PACK: {}", obj_type_id))?
+        .ok_or_else(|| anyhow!("Unexpected type id in PACK: {}", obj_type_id))?
         .to_vec();
 
     if (1..=4).contains(&obj_type_id) {

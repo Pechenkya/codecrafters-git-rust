@@ -59,9 +59,12 @@ pub fn parse_refs_resp_and_check(text: &str) -> Result<(Vec<(String, String)>, S
                 // Create list of pairs sha-name and return it
                 let result: Vec<(String, String)> = pkt_lines
                     .into_iter()
-                    .map(|s| {
-                        let (sha, name) = s[4..].split_once(' ').unwrap();
-                        (sha.to_string(), name.to_string())
+                    .filter_map(|s| {
+                        if let Some((sha, name)) = s[4..].split_once(' ') {
+                            Some((sha.to_string(), name.to_string()))
+                        } else {
+                            None
+                        }
                     })
                     .collect();
 

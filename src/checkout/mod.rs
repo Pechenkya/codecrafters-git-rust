@@ -13,7 +13,9 @@ pub fn write_refs(refs: &Vec<(String, String)>) -> Result<()> {
     for (hash, path) in refs {
         let full_path = format!(".git/{path}");
         fs::create_dir_all(
-            Path::new(&full_path).parent().ok_or(anyhow!("Cannot create dirs..."))?
+            Path::new(&full_path)
+                .parent()
+                .ok_or_else(|| anyhow!("Cannot create dirs..."))?
         )?;
 
         // Save ref
@@ -54,9 +56,15 @@ pub fn checkout_head() -> Result<()> {
     let commit = String::from_utf8(read_data_decompressed(&commit_hash)?)?;
     // println!("commit data:{commit}");
 
-    let (_, commit_contents) = commit.split_once('\0').ok_or(anyhow!("Cannot parse commit!"))?;
-    let (tree_data, _) = commit_contents.split_once('\n').ok_or(anyhow!("Cannot parse commit!"))?;
-    let (obj_type, tree_hash) = tree_data.split_once(' ').ok_or(anyhow!("Cannot parse commit!"))?;
+    let (_, commit_contents) = commit
+        .split_once('\0')
+        .ok_or_else(|| anyhow!("Cannot parse commit!"))?;
+    let (tree_data, _) = commit_contents
+        .split_once('\n')
+        .ok_or_else(|| anyhow!("Cannot parse commit!"))?;
+    let (obj_type, tree_hash) = tree_data
+        .split_once(' ')
+        .ok_or_else(|| anyhow!("Cannot parse commit!"))?;
     if obj_type != "tree" {
         bail!("Incorrect commit object structure!");
     }
@@ -80,17 +88,17 @@ fn checkout_tree(tree_hash: &str, path: String) -> Result<()> {
         let object_contents: Vec<u8> = read_data_decompressed(&sha)?;
         let mut slices_itr = object_contents.split_inclusive(|c| *c == b'\0');
 
-        let header = slices_itr.next().ok_or(anyhow!("Cannot divide header!"))?;
+        let header = slices_itr.next().ok_or_else(|| anyhow!("Cannot divide header!"))?;
 
         if header.starts_with(b"tree") {
             // Go to inner tree
             checkout_tree(&sha, format!("{path}/{filename}"))?;
         } else if header.starts_with(b"blob") {
-            // Save object
-            let binary = slices_itr.next().unwrap_or(&[0u8; 0]);
-
+            // Create file and save data
             let mut obj: fs::File = fs::File::create(format!("{path}/{filename}"))?;
-            obj.write_all(binary)?;
+            if let Some(binary) = slices_itr.next() {
+                obj.write_all(binary)?;
+            }
         } else {
             bail!("Checkout wasn't successfull, wrong header!");
         }

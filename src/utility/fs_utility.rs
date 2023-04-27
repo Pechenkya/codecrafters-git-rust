@@ -64,7 +64,9 @@ pub fn write_data(data: Vec<u8>) -> Result<String> {
     // Create path
     let path_to_save: String = compute_path_from_sha(&hash)?;
     std::fs::create_dir_all(
-        Path::new(&path_to_save).parent().ok_or(anyhow!("Corrupted file path"))?
+        Path::new(&path_to_save)
+            .parent()
+            .ok_or_else(|| anyhow!("Corrupted file path"))?
     )?;
 
     // Save object

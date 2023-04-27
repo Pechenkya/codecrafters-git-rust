@@ -37,11 +37,15 @@ pub fn parse_tree(binary: &[u8]) -> Result<Vec<(String, String, String)>> {
     let buff_string = unsafe { String::from_utf8_unchecked(binary.to_vec()) };
     let (header, mut text) = buff_string
         .split_once('\0')
-        .ok_or(anyhow!("Cannot separate header!"))?;
+        .ok_or_else(|| anyhow!("Cannot separate header!"))?;
 
     // If header block is for correct tree -> parse text to find tuples (<file name>, <mode>, <SHA-1>)
     let mut contents: Vec<(String, String, String)> = Vec::new();
-    if let ("tree", _tree_size) = header.split_once(' ').ok_or(anyhow!("Not a tree type!"))? {
+    if
+        let ("tree", _tree_size) = header
+            .split_once(' ')
+            .ok_or_else(|| anyhow!("Not a tree type!"))?
+    {
         // Simple parse with unchecked string
         while !text.is_empty() {
             // Check if struct is correct and we can extract mode
@@ -49,7 +53,7 @@ pub fn parse_tree(binary: &[u8]) -> Result<Vec<(String, String, String)>> {
                 // Extract filename
                 let (file_name, rest) = rest
                     .split_once('\0')
-                    .ok_or(anyhow!("Cannot separate file name!"))?;
+                    .ok_or_else(|| anyhow!("Cannot separate file name!"))?;
 
                 // Extract SHA-1
                 let (sha, rem) = rest.split_at(20);

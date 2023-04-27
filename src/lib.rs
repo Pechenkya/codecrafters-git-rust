@@ -94,9 +94,9 @@ pub mod commands {
             let e_path = entry.path();
             let file_name = e_path
                 .file_name()
-                .ok_or(anyhow!("Corrupted filename!"))?
+                .ok_or_else(|| anyhow!("Corrupted filename!"))?
                 .to_str()
-                .ok_or(anyhow!("Corrupted filename!"))?;
+                .ok_or_else(|| anyhow!("Corrupted filename!"))?;
             if e_path.is_dir() {
                 if e_path.ends_with(".git") {
                     continue; // TODO: Parse .gitignore?
