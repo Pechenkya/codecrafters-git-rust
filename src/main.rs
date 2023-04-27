@@ -105,19 +105,17 @@ fn main() {
         }
         Commands::Clone { repo_url, folder } => {
             if let Some(path) = folder {
-                match commands::clone_repo(&repo_url, &path) {
+                match commands::clone_repo(repo_url, &path) {
+                    Ok(r) => println!("{r}"),
+                    Err(err) => eprintln!("Error: {}", err),
+                }
+            } else if let Some((_, new_folder_name)) = repo_url.rsplit_once('/') {
+                match commands::clone_repo(repo_url, &format!("./{new_folder_name}")) {
                     Ok(r) => println!("{r}"),
                     Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                if let Some((_, new_folder_name)) = repo_url.rsplit_once('/') {
-                    match commands::clone_repo(&repo_url, &format!("./{new_folder_name}")) {
-                        Ok(r) => println!("{r}"),
-                        Err(err) => eprintln!("Error: {}", err),
-                    }
-                } else {
-                    eprintln!("'clone' has incorrect url");
-                }
+                eprintln!("'clone' has incorrect url");
             }
         }
     }
