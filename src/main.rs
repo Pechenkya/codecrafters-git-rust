@@ -1,86 +1,124 @@
-use std::env;
 use git_starter_rust::commands;
+use clap::{ Parser, Subcommand };
+
+#[derive(Parser)]
+#[command(version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    #[command(name = "init")] Init,
+    #[command(name = "cat-file")] CatFile {
+        #[clap(short = 'p')]
+        pretty_print: bool,
+        file_sha: String,
+    },
+    #[command(name = "hash-object")] HashObject {
+        #[clap(short)]
+        write: bool,
+        file_path: String,
+    },
+    #[command(name = "ls-tree")] LsTree {
+        #[clap(long = "name-only")]
+        name_only: bool,
+        tree_sha: String,
+    },
+    #[command(name = "write-tree")] WriteTree,
+    #[command(name = "commit-tree")] CommitTree {
+        tree_sha: String,
+        #[clap(short)]
+        parent: Option<String>,
+        #[clap(short)]
+        message: Option<String>,
+    },
+    #[command(name = "clone")] Clone {
+        repo_url: String,
+        folder: Option<String>,
+    },
+}
 
 fn main() {
-    let args: Vec<String> = env::args().skip(1).collect();
-    if args.is_empty() {
-        println!("git called with an empty argument list!");
-        return;
-    }
+    let cli = Cli::parse();
 
-    match args[0].as_str() {
-        "init" => {
-            if args.len() == 1 {
-                match commands::init() {
+    match &cli.command {
+        Commands::Init => {
+            match commands::init() {
+                Ok(r) => print!("{r}"),
+                Err(err) => eprintln!("Error: {}", err),
+            }
+        }
+        Commands::CatFile { pretty_print, file_sha } => {
+            if *pretty_print {
+                match commands::cat_file_print(file_sha) {
                     Ok(r) => print!("{r}"),
                     Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                eprintln!("Unrecognised 'init' signature!");
+                eprintln!("'cat-file' supports only print with '-p'!");
             }
         }
-        "cat-file" => {
-            if args.len() == 3 && args[1] == "-p" {
-                match commands::cat_file_print(&args[2]) {
-                    Ok(r) => print!("{r}"),
-                    Err(err) => eprintln!("Error: {}", err),
-                }
-            } else {
-                eprintln!("Unrecognised 'cat-file' signature!");
-            }
-        }
-        "hash-object" => {
-            if args.len() == 3 && args[1] == "-w" {
-                match commands::hash_object_write(&args[2]) {
+        Commands::HashObject { write, file_path } => {
+            if *write {
+                match commands::hash_object_write(file_path) {
                     Ok(r) => println!("{r}"),
                     Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                eprintln!("Unrecognised 'hash-object' signature!");
+                eprintln!("'hash-object' supports only write with '-w'!");
             }
         }
-        "ls-tree" => {
-            if args.len() == 3 && args[1] == "--name-only" {
-                match commands::read_tree_names(&args[2]) {
+        Commands::LsTree { name_only, tree_sha } => {
+            if *name_only {
+                match commands::read_tree_names(tree_sha) {
                     Ok(r) => println!("{r}"),
                     Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                eprintln!("Unrecognised 'ls-tree' signature!");
+                eprintln!("'ls-tree' supports only name print with '--name-only'!");
             }
         }
-        "write-tree" => {
-            if args.len() == 1 {
-                match commands::write_tree() {
+        Commands::WriteTree => {
+            match commands::write_tree() {
+                Ok(r) => println!("{r}"),
+                Err(err) => eprintln!("Error: {}", err),
+            }
+        }
+        Commands::CommitTree { tree_sha, parent, message } => {
+            if let Some(par) = parent {
+                if let Some(text) = message {
+                    match commands::create_commit_with_message(tree_sha, par, text) {
+                        Ok(r) => println!("{r}"),
+                        Err(err) => eprintln!("Error: {}", err),
+                    }
+                } else {
+                    match commands::create_commit_with_message(tree_sha, par, "<No message>") {
+                        Ok(r) => println!("{r}"),
+                        Err(err) => eprintln!("Error: {}", err),
+                    }
+                }
+            } else {
+                eprintln!("'commit-tree' needs parent provided with '-p'");
+            }
+        }
+        Commands::Clone { repo_url, folder } => {
+            if let Some(path) = folder {
+                match commands::clone_repo(&repo_url, &path) {
                     Ok(r) => println!("{r}"),
                     Err(err) => eprintln!("Error: {}", err),
                 }
             } else {
-                eprintln!("Unrecognised 'write-tree' signature!");
-            }
-        }
-        "commit-tree" => {
-            if args.len() == 6 && args[2] == "-p" && args[4] == "-m" {
-                match commands::create_commit_with_message(&args[1], &args[3], &args[5]) {
-                    Ok(r) => println!("{r}"),
-                    Err(err) => eprintln!("Error: {}", err),
+                if let Some((_, new_folder_name)) = repo_url.rsplit_once('/') {
+                    match commands::clone_repo(&repo_url, &format!("./{new_folder_name}")) {
+                        Ok(r) => println!("{r}"),
+                        Err(err) => eprintln!("Error: {}", err),
+                    }
+                } else {
+                    eprintln!("'clone' has incorrect url");
                 }
-            } else {
-                eprintln!("Unrecognised 'commit-tree' signature!");
             }
-        }
-        "clone" => {
-            if args.len() == 3 {
-                match commands::clone_repo(&args[1], &args[2]) {
-                    Ok(r) => println!("{r}"),
-                    Err(err) => eprintln!("Error: {}", err),
-                }
-            } else {
-                eprintln!("Unrecognised 'clone' signature!");
-            }
-        }
-        _ => {
-            eprintln!("unknown command: {}", args[0]);
         }
     }
 }

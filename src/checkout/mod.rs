@@ -96,6 +96,7 @@ fn checkout_tree(tree_hash: &str, path: String) -> Result<()> {
         } else if header.starts_with(b"blob") {
             // Create file and save data
             let mut obj: fs::File = fs::File::create(format!("{path}/{filename}"))?;
+
             if let Some(binary) = slices_itr.next() {
                 obj.write_all(binary)?;
             }
