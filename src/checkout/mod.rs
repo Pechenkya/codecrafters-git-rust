@@ -10,7 +10,17 @@ const HEAD_PATH: &str = ".git/HEAD";
 /// Function to write all refs from commit
 /// To call we must be right in the working directory!
 pub fn write_refs(refs: &Vec<(String, String)>) -> Result<()> {
-    for (hash, path) in refs {
+    let head_hash = &refs.get(0).ok_or_else(|| anyhow!("Cannot get HEAD ref"))?.0;
+    fs::create_dir_all(".git/")?;
+
+    for (hash, path) in &refs[1..] {
+        if hash == head_hash {
+            // Write ref into head
+            // Save ref
+            let mut obj: fs::File = fs::File::create(".git/HEAD")?;
+            obj.write_all(format!("ref: {path}").as_bytes())?;
+        }
+
         let full_path = format!(".git/{path}");
         fs::create_dir_all(
             Path::new(&full_path)
@@ -21,6 +31,12 @@ pub fn write_refs(refs: &Vec<(String, String)>) -> Result<()> {
         // Save ref
         let mut obj: fs::File = fs::File::create(full_path)?;
         obj.write_all(hash.as_bytes())?;
+    }
+
+    // Detached head
+    if !fs::metadata(".git/HEAD").is_ok() {
+        let mut obj: fs::File = fs::File::create(".git/HEAD")?;
+        obj.write_all(format!("{head_hash}").as_bytes())?;
     }
 
     Ok(())
@@ -40,7 +56,7 @@ pub fn checkout_head() -> Result<()> {
 
     // Get commit referenced by HEAD
     let commit_hash: String = if head_contentents.starts_with("ref: ") {
-        let additional_path: &str = &head_contentents[5..head_contentents.len() - 1];
+        let additional_path: &str = &head_contentents[5..head_contentents.len()];
         let bytes: Vec<u8> = match fs::read(format!(".git/{additional_path}")) {
             Ok(data) => data,
             Err(_) => {
