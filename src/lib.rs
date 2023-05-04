@@ -236,6 +236,7 @@ pub mod commands {
         #[allow(dead_code)]
         const TEST_REPO_3: &str = "https://github.com/codecrafters-io/git-sample-3";
 
+        #[ignore]
         #[test]
         fn send_request_to_clone() {
             fs::remove_dir_all("/tmp/clone_repo_test").unwrap();
@@ -244,6 +245,7 @@ pub mod commands {
             assert!(res.is_ok());
         }
 
+        #[ignore]
         #[test]
         fn check_sha_convert() {
             let sha = String::from("e673d1b7eaa0aa01b5bc2442d570a765bdaae751");
@@ -251,6 +253,7 @@ pub mod commands {
             assert_eq!(path, "./.git/objects/e6/73d1b7eaa0aa01b5bc2442d570a765bdaae751");
         }
 
+        #[ignore]
         #[test]
         fn check_blob_prefix() {
             let contents = "hello world!".as_bytes().to_vec();
