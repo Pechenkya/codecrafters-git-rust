@@ -18,7 +18,7 @@ pub fn write_refs(refs: &Vec<(String, String)>) -> Result<()> {
             // Write ref into head
             // Save ref
             let mut obj: fs::File = fs::File::create(".git/HEAD")?;
-            obj.write_all(format!("ref: {path}").as_bytes())?;
+            obj.write_all(format!("ref: {path}\n").as_bytes())?;
         }
 
         let full_path = format!(".git/{path}");
@@ -30,13 +30,13 @@ pub fn write_refs(refs: &Vec<(String, String)>) -> Result<()> {
 
         // Save ref
         let mut obj: fs::File = fs::File::create(full_path)?;
-        obj.write_all(hash.as_bytes())?;
+        obj.write_all(format!("{hash}\n").as_bytes())?;
     }
 
     // Detached head
     if !fs::metadata(".git/HEAD").is_ok() {
         let mut obj: fs::File = fs::File::create(".git/HEAD")?;
-        obj.write_all(format!("{head_hash}").as_bytes())?;
+        obj.write_all(format!("{head_hash}\n").as_bytes())?;
     }
 
     Ok(())
@@ -56,7 +56,7 @@ pub fn checkout_head() -> Result<()> {
 
     // Get commit referenced by HEAD
     let commit_hash: String = if head_contentents.starts_with("ref: ") {
-        let additional_path: &str = &head_contentents[5..head_contentents.len()];
+        let additional_path: &str = &head_contentents[5..head_contentents.len() - 1];
         let bytes: Vec<u8> = match fs::read(format!(".git/{additional_path}")) {
             Ok(data) => data,
             Err(_) => {
