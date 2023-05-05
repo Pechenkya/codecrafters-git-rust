@@ -5,6 +5,7 @@ use assert_fs::prelude::*; // Temp file and file assertion
 use std::process::Command; // Run programs
 use std::env;
 use std::fs::{ self, File };
+use std::path::Path;
 use std::io::Write;
 use rand::prelude::*;
 use folder_compare::FolderCompare;
@@ -25,8 +26,8 @@ fn init_cmd() -> Result<(), Box<dyn std::error::Error>> {
     let temp_folder = assert_fs::TempDir::new()?;
     env::set_current_dir(temp_folder.path())?;
 
-    cmd.arg("init");
     // Check output
+    cmd.arg("init");
     cmd.assert().success().stdout(predicate::str::contains("Initialized git directory"));
 
     // Check folder structure
@@ -130,10 +131,41 @@ fn write_blob() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[ignore]
+fn write_random_contents<T: AsRef<Path>>(path: &T) -> Result<(), Box<dyn std::error::Error>> {
+    Ok(())
+}
+
+#[serial(comm)]
+#[test]
+fn read_tree() -> Result<(), Box<dyn std::error::Error>> {
+    println!("------------ READ TREE -------------");
+    let temp_folder = assert_fs::TempDir::new()?;
+    env::set_current_dir(temp_folder.path())?;
+
+    // Setup dir
+    write_random_contents(&temp_folder.path());
+
+    Ok(())
+}
+
+#[serial(comm)]
+#[test]
+fn write_tree() -> Result<(), Box<dyn std::error::Error>> {
+    println!("------------ WRITE TREE -------------");
+    let temp_folder = assert_fs::TempDir::new()?;
+    env::set_current_dir(temp_folder.path())?;
+
+    // Clone with default git
+    print!("Clonning with git clone");
+
+    Ok(())
+}
+
+#[serial(comm)]
 #[test]
 fn clone_test() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------ CLONE -------------");
+    env::set_current_dir("/")?;
     let repo_id = thread_rng().gen_range(1..=3);
     let remote_repo = match repo_id {
         1 => TEST_REPO_1,
