@@ -1,14 +1,14 @@
 use serial_test::serial; // To call tests sequentially
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
-use assert_fs::prelude::*; // Temp file and file assertion
+use assert_fs::{ prelude::*, TempDir }; // Temp file and file assertion
 use std::process::Command; // Run programs
 use std::env;
 use std::fs::{ self, File };
-use std::path::Path;
 use std::io::Write;
 use rand::prelude::*;
 use folder_compare::FolderCompare;
+use rand::distributions::{ Alphanumeric, DistString };
 
 const CRATE_NAME: &str = "git-starter-rust";
 const SHA_REGEX: &str = "[0-9a-f]{40}";
@@ -40,6 +40,7 @@ fn init_cmd() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!("ref: refs/heads/master\n", &String::from_utf8_lossy(text_data));
 
     temp_folder.close()?;
+    env::set_current_dir("/")?;
 
     Ok(())
 }
@@ -82,6 +83,7 @@ fn read_blob() -> Result<(), Box<dyn std::error::Error>> {
     println!(" - OK");
 
     temp_folder.close()?;
+    env::set_current_dir("/")?;
 
     Ok(())
 }
@@ -127,12 +129,43 @@ fn write_blob() -> Result<(), Box<dyn std::error::Error>> {
     println!(" - OK");
 
     temp_folder.close()?;
+    env::set_current_dir("/")?;
 
     Ok(())
 }
 
-fn write_random_contents<T: AsRef<Path>>(path: &T) -> Result<(), Box<dyn std::error::Error>> {
-    Ok(())
+struct TestDirEntry {
+    pub name: String,
+    #[allow(dead_code)]
+    pub is_dir: bool,
+}
+
+/// Returns top-level test dir entries sorted by name
+fn write_random_contents(dir: &TempDir) -> Result<Vec<TestDirEntry>, Box<dyn std::error::Error>> {
+    let mut res: Vec<TestDirEntry> = Vec::new();
+
+    // Write top level
+    let mut temp_file: File = File::create("text")?;
+    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
+    fs::create_dir_all(dir.child("dir1"))?;
+    fs::create_dir_all(dir.child("dir2"))?;
+    res.append(
+        &mut vec![
+            TestDirEntry { name: "text".to_string(), is_dir: false },
+            TestDirEntry { name: "dir1".to_string(), is_dir: true },
+            TestDirEntry { name: "dir2".to_string(), is_dir: true }
+        ]
+    );
+
+    // Write low level
+    let mut temp_file: File = File::create(dir.child("dir1/foo"))?;
+    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
+
+    let mut temp_file: File = File::create(dir.child("dir2/bar"))?;
+    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
+
+    res.sort_by_key(|e| e.name.clone());
+    Ok(res)
 }
 
 #[serial(comm)]
@@ -142,8 +175,52 @@ fn read_tree() -> Result<(), Box<dyn std::error::Error>> {
     let temp_folder = assert_fs::TempDir::new()?;
     env::set_current_dir(temp_folder.path())?;
 
+    // Init
+    print!("Initialising directory");
+    let mut cmd = Command::cargo_bin(CRATE_NAME)?;
+    cmd.arg("init");
+    cmd.assert().success().stdout(predicate::str::contains("Initialized git directory"));
+    println!(" - OK");
+
     // Setup dir
-    write_random_contents(&temp_folder.path());
+    print!("Setup dir");
+    let expected_result: Vec<_> = write_random_contents(&temp_folder)?
+        .into_iter()
+        .map(|v| v.name)
+        .collect();
+    println!(" - OK");
+
+    // Commit and write tree
+    print!("Calling git commit and write-tree");
+    let mut cmd = Command::new("git");
+    cmd.args(["add", "."]);
+    cmd.assert().success();
+    let mut cmd = Command::new("git");
+    cmd.args(["commit", "-m", "Write tree"]);
+    cmd.assert().success();
+    print!("Calling git write-tree");
+    let mut cmd = Command::new("git");
+    cmd.arg("write-tree");
+
+    // Check output
+    cmd.assert().success().stdout(predicate::str::is_match(SHA_REGEX)?);
+    let mut returned_sha = cmd.output()?.stdout;
+    returned_sha.pop();
+    println!(" - OK");
+
+    // Call read tree
+    print!("Calling your ls-tree");
+    let mut cmd = Command::cargo_bin(CRATE_NAME)?;
+    cmd.args(["ls-tree", "--name-only", &String::from_utf8(returned_sha)?]);
+
+    // Check output
+    cmd.assert()
+        .success()
+        .stdout(predicate::eq(format!("{}\n", expected_result.join("\n"))));
+    println!(" - OK");
+
+    temp_folder.close()?;
+    env::set_current_dir("/")?;
 
     Ok(())
 }
@@ -155,8 +232,45 @@ fn write_tree() -> Result<(), Box<dyn std::error::Error>> {
     let temp_folder = assert_fs::TempDir::new()?;
     env::set_current_dir(temp_folder.path())?;
 
-    // Clone with default git
-    print!("Clonning with git clone");
+    // Init
+    print!("Initialising directory");
+    let mut cmd = Command::cargo_bin(CRATE_NAME)?;
+    cmd.arg("init");
+    cmd.assert().success().stdout(predicate::str::contains("Initialized git directory"));
+    println!(" - OK");
+
+    // Setup dir
+    print!("Setup dir");
+    let expected_result: Vec<_> = write_random_contents(&temp_folder)?
+        .into_iter()
+        .map(|v| v.name)
+        .collect();
+    println!(" - OK");
+
+    // Call write tree
+    print!("Calling yourgit write-tree");
+    let mut cmd = Command::cargo_bin(CRATE_NAME)?;
+
+    cmd.arg("write-tree");
+    cmd.assert().success().stdout(predicate::str::is_match(SHA_REGEX)?);
+
+    let mut returned_sha = cmd.output()?.stdout;
+    returned_sha.pop();
+    println!(" - OK");
+
+    // Check tree
+    print!("Calling git ls-tree");
+    let mut cmd = Command::new("git");
+    cmd.args(["ls-tree", "--name-only", &String::from_utf8(returned_sha)?]);
+
+    // Check output
+    cmd.assert()
+        .success()
+        .stdout(predicate::eq(format!("{}\n", expected_result.join("\n"))));
+    println!(" - OK");
+
+    temp_folder.close()?;
+    env::set_current_dir("/")?;
 
     Ok(())
 }
@@ -165,7 +279,6 @@ fn write_tree() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn clone_test() -> Result<(), Box<dyn std::error::Error>> {
     println!("------------ CLONE -------------");
-    env::set_current_dir("/")?;
     let repo_id = thread_rng().gen_range(1..=3);
     let remote_repo = match repo_id {
         1 => TEST_REPO_1,
