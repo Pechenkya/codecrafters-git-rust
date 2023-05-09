@@ -3,9 +3,11 @@ use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
 use assert_fs::{ prelude::*, TempDir }; // Temp file and file assertion
 use std::process::Command; // Run programs
+use anyhow::{ anyhow, bail, Result };
 use std::env;
 use std::fs::{ self, File };
-use std::io::Write;
+use std::io::prelude::*;
+use flate2::read::ZlibDecoder;
 use rand::prelude::*;
 use folder_compare::FolderCompare;
 use rand::distributions::{ Alphanumeric, DistString };
@@ -17,6 +19,7 @@ const TEST_REPO_1: &str = "https://github.com/codecrafters-io/git-sample-1";
 const TEST_REPO_2: &str = "https://github.com/codecrafters-io/git-sample-2";
 const TEST_REPO_3: &str = "https://github.com/codecrafters-io/git-sample-3";
 
+/// STAGE 1
 #[serial(comm)]
 #[test]
 fn init_cmd() -> Result<(), Box<dyn std::error::Error>> {
@@ -45,6 +48,7 @@ fn init_cmd() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// STAGE 2
 #[serial(comm)]
 #[test]
 fn read_blob() -> Result<(), Box<dyn std::error::Error>> {
@@ -88,6 +92,7 @@ fn read_blob() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// STAGE 3
 #[serial(comm)]
 #[test]
 fn write_blob() -> Result<(), Box<dyn std::error::Error>> {
@@ -147,7 +152,7 @@ fn write_random_contents(dir: &TempDir) -> Result<Vec<TestDirEntry>, Box<dyn std
     // Write top level
     let mut temp_file: File = File::create("text")?;
     temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
-    fs::create_dir_all(dir.child("dir1"))?;
+    fs::create_dir_all(dir.child("dir1/subdir1"))?;
     fs::create_dir_all(dir.child("dir2"))?;
     res.append(
         &mut vec![
@@ -160,7 +165,8 @@ fn write_random_contents(dir: &TempDir) -> Result<Vec<TestDirEntry>, Box<dyn std
     // Write low level
     let mut temp_file: File = File::create(dir.child("dir1/foo"))?;
     temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
-
+    let mut temp_file: File = File::create(dir.child("dir1/subdir1/foolow"))?;
+    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
     let mut temp_file: File = File::create(dir.child("dir2/bar"))?;
     temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
 
@@ -168,6 +174,7 @@ fn write_random_contents(dir: &TempDir) -> Result<Vec<TestDirEntry>, Box<dyn std
     Ok(res)
 }
 
+/// STAGE 4
 #[serial(comm)]
 #[test]
 fn read_tree() -> Result<(), Box<dyn std::error::Error>> {
@@ -225,6 +232,7 @@ fn read_tree() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// STAGE 5
 #[serial(comm)]
 #[test]
 fn write_tree() -> Result<(), Box<dyn std::error::Error>> {
@@ -275,6 +283,121 @@ fn write_tree() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn get_tree_entries(sha: &String) -> Result<Vec<(String, String)>> {
+    let path = format!(".git/objects/{}/{}", &sha[..2], &sha[2..sha.len()]);
+    let data = fs::read(path)?;
+    // Decompress data and read it to string
+    let mut decoder = ZlibDecoder::new(data.as_slice());
+    let mut bytes_decoded: Vec<u8> = Vec::new();
+    decoder.read_to_end(&mut bytes_decoded)?;
+
+    let data = String::from_utf8(bytes_decoded)?;
+    let (header, text) = data.split_once('\0').ok_or_else(|| anyhow!("Cannot separate header!"))?;
+
+    if !header.contains("commit") {
+        bail!("Not a commit object!");
+    }
+
+    let entries: Vec<_> = text
+        .split('\n')
+        .map(|s| {
+            let pair = s.split_once(' ').unwrap_or_else(|| ("\0", s));
+            (pair.0.to_string(), pair.1.to_string())
+        })
+        .collect();
+
+    Ok(entries)
+}
+
+/// STAGE 6
+#[serial(comm)]
+#[test]
+fn commit_test() -> Result<(), Box<dyn std::error::Error>> {
+    println!("------------ CREATE COMMIT -------------");
+    const MESSAGE: &str = "Hello commit!";
+    let temp_folder = assert_fs::TempDir::new()?;
+    env::set_current_dir(temp_folder.path())?;
+
+    // Init
+    print!("Initialising repo");
+    let mut cmd = Command::new("git");
+    cmd.arg("init");
+    cmd.assert().success();
+    println!(" - OK");
+
+    // Setup dir
+    print!("Setup dir");
+    write_random_contents(&temp_folder)?;
+    println!(" - OK");
+
+    // Commit parent
+    print!("Creating git commit");
+    let mut cmd = Command::new("git");
+    cmd.args(["add", "."]);
+    cmd.assert().success();
+    let mut cmd = Command::new("git");
+    cmd.args(["commit", "-m", "test"]);
+    cmd.assert().success();
+    let mut cmd = Command::new("git");
+    cmd.args(["rev-parse", "HEAD"]);
+    cmd.assert().success().stdout(predicate::str::is_match(SHA_REGEX)?);
+    let mut out = cmd.output()?.stdout;
+    out.pop();
+    let parent_sha = String::from_utf8(out)?;
+    println!(" - OK");
+
+    // Writing new file and writing tree
+    print!("Write tree");
+    let mut temp_file: File = File::create(temp_folder.child("help"))?;
+    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
+
+    let mut cmd = Command::new("git");
+    cmd.args(["add", "."]);
+    let mut cmd = Command::new("git");
+    cmd.args(["write-tree"]);
+    cmd.assert().success().stdout(predicate::str::is_match(SHA_REGEX)?);
+    let mut out = cmd.output()?.stdout;
+    out.pop();
+    let tree_sha = String::from_utf8(out)?;
+    println!(" - OK");
+
+    // Write commit object
+    print!("Call yourgit commit-tree");
+    let mut cmd = Command::cargo_bin(CRATE_NAME)?;
+    cmd.args(["commit-tree", &tree_sha, "-p", &parent_sha, "-m", MESSAGE]);
+    cmd.assert().success().stdout(predicate::str::is_match(SHA_REGEX)?);
+    let mut returned_sha = cmd.output()?.stdout;
+    returned_sha.pop();
+    println!(" - OK");
+
+    // Check commit object
+    print!("Check commit object");
+    let tree_entries = get_tree_entries(&String::from_utf8(returned_sha)?)?;
+    // println!("{:?}", tree_entries);
+
+    assert_eq!(&tree_entries[0].0, "tree");
+    assert_eq!(tree_entries[0].1, tree_sha);
+    assert_eq!(&tree_entries[1].0, "parent");
+    assert_eq!(tree_entries[1].1, parent_sha);
+
+    let message_block = tree_entries[4..].to_vec();
+    let message_lines: Vec<_> = message_block
+        .into_iter()
+        .map(|(l, r)| if l == "\0" { r } else { format!("{l} {r}") })
+        .collect();
+    let renewed_message = message_lines.join("\n");
+    let exptected_block = format!("\n{MESSAGE}\n");
+    assert_eq!(renewed_message, exptected_block);
+
+    println!(" - OK");
+
+    temp_folder.close()?;
+    env::set_current_dir("/")?;
+
+    Ok(())
+}
+
+/// STAGE 7
 #[serial(comm)]
 #[test]
 fn clone_test() -> Result<(), Box<dyn std::error::Error>> {
