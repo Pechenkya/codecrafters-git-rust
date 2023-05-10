@@ -55,7 +55,7 @@ pub fn checkout_head() -> Result<()> {
     // println!("HEAD: {head_contentents}");
 
     // Get commit referenced by HEAD
-    let commit_hash: String = if head_contentents.starts_with("ref: ") {
+    let commit_hash = if head_contentents.starts_with("ref: ") {
         let additional_path: &str = &head_contentents[5..head_contentents.len() - 1];
         let bytes: Vec<u8> = match fs::read(format!(".git/{additional_path}")) {
             Ok(data) => data,
@@ -63,11 +63,11 @@ pub fn checkout_head() -> Result<()> {
                 bail!("Cannot open '{}'", additional_path);
             }
         };
-        String::from_utf8(bytes)?
+        String::from_utf8(bytes)?[..40].to_owned()
     } else {
-        head_contentents
+        head_contentents[..40].to_owned()
     };
-    // println!("commit: {commit_hash}");
+    // println!("commit: {commit_hash:?}");
 
     let commit = String::from_utf8(read_data_decompressed(&commit_hash)?)?;
     // println!("commit data:{commit}");

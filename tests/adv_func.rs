@@ -19,6 +19,68 @@ const TEST_REPO_1: &str = "https://github.com/codecrafters-io/git-sample-1";
 const TEST_REPO_2: &str = "https://github.com/codecrafters-io/git-sample-2";
 const TEST_REPO_3: &str = "https://github.com/codecrafters-io/git-sample-3";
 
+// Util
+struct TestDirEntry {
+    pub name: String,
+    #[allow(dead_code)]
+    pub is_dir: bool,
+}
+
+/// Returns top-level test dir entries sorted by name
+fn write_random_contents(dir: &TempDir) -> Result<Vec<TestDirEntry>, Box<dyn std::error::Error>> {
+    let mut res: Vec<TestDirEntry> = Vec::new();
+
+    // Write top level
+    let mut temp_file: File = File::create("text")?;
+    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
+    fs::create_dir_all(dir.child("dir1/subdir1"))?;
+    fs::create_dir_all(dir.child("dir2"))?;
+    res.append(
+        &mut vec![
+            TestDirEntry { name: "text".to_string(), is_dir: false },
+            TestDirEntry { name: "dir1".to_string(), is_dir: true },
+            TestDirEntry { name: "dir2".to_string(), is_dir: true }
+        ]
+    );
+
+    // Write low level
+    let mut temp_file: File = File::create(dir.child("dir1/foo"))?;
+    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
+    let mut temp_file: File = File::create(dir.child("dir1/subdir1/foolow"))?;
+    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
+    let mut temp_file: File = File::create(dir.child("dir2/bar"))?;
+    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
+
+    res.sort_by_key(|e| e.name.clone());
+    Ok(res)
+}
+
+fn get_tree_entries(sha: &String) -> Result<Vec<(String, String)>> {
+    let path = format!(".git/objects/{}/{}", &sha[..2], &sha[2..sha.len()]);
+    let data = fs::read(path)?;
+    // Decompress data and read it to string
+    let mut decoder = ZlibDecoder::new(data.as_slice());
+    let mut bytes_decoded: Vec<u8> = Vec::new();
+    decoder.read_to_end(&mut bytes_decoded)?;
+
+    let data = String::from_utf8(bytes_decoded)?;
+    let (header, text) = data.split_once('\0').ok_or_else(|| anyhow!("Cannot separate header!"))?;
+
+    if !header.contains("commit") {
+        bail!("Not a commit object!");
+    }
+
+    let entries: Vec<_> = text
+        .split('\n')
+        .map(|s| {
+            let pair = s.split_once(' ').unwrap_or_else(|| ("\0", s));
+            (pair.0.to_string(), pair.1.to_string())
+        })
+        .collect();
+
+    Ok(entries)
+}
+
 /// STAGE 1
 #[serial(comm)]
 #[test]
@@ -139,41 +201,6 @@ fn write_blob() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-struct TestDirEntry {
-    pub name: String,
-    #[allow(dead_code)]
-    pub is_dir: bool,
-}
-
-/// Returns top-level test dir entries sorted by name
-fn write_random_contents(dir: &TempDir) -> Result<Vec<TestDirEntry>, Box<dyn std::error::Error>> {
-    let mut res: Vec<TestDirEntry> = Vec::new();
-
-    // Write top level
-    let mut temp_file: File = File::create("text")?;
-    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
-    fs::create_dir_all(dir.child("dir1/subdir1"))?;
-    fs::create_dir_all(dir.child("dir2"))?;
-    res.append(
-        &mut vec![
-            TestDirEntry { name: "text".to_string(), is_dir: false },
-            TestDirEntry { name: "dir1".to_string(), is_dir: true },
-            TestDirEntry { name: "dir2".to_string(), is_dir: true }
-        ]
-    );
-
-    // Write low level
-    let mut temp_file: File = File::create(dir.child("dir1/foo"))?;
-    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
-    let mut temp_file: File = File::create(dir.child("dir1/subdir1/foolow"))?;
-    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
-    let mut temp_file: File = File::create(dir.child("dir2/bar"))?;
-    temp_file.write_all(Alphanumeric.sample_string(&mut thread_rng(), 20).as_bytes())?;
-
-    res.sort_by_key(|e| e.name.clone());
-    Ok(res)
-}
-
 /// STAGE 4
 #[serial(comm)]
 #[test]
@@ -281,32 +308,6 @@ fn write_tree() -> Result<(), Box<dyn std::error::Error>> {
     env::set_current_dir("/")?;
 
     Ok(())
-}
-
-fn get_tree_entries(sha: &String) -> Result<Vec<(String, String)>> {
-    let path = format!(".git/objects/{}/{}", &sha[..2], &sha[2..sha.len()]);
-    let data = fs::read(path)?;
-    // Decompress data and read it to string
-    let mut decoder = ZlibDecoder::new(data.as_slice());
-    let mut bytes_decoded: Vec<u8> = Vec::new();
-    decoder.read_to_end(&mut bytes_decoded)?;
-
-    let data = String::from_utf8(bytes_decoded)?;
-    let (header, text) = data.split_once('\0').ok_or_else(|| anyhow!("Cannot separate header!"))?;
-
-    if !header.contains("commit") {
-        bail!("Not a commit object!");
-    }
-
-    let entries: Vec<_> = text
-        .split('\n')
-        .map(|s| {
-            let pair = s.split_once(' ').unwrap_or_else(|| ("\0", s));
-            (pair.0.to_string(), pair.1.to_string())
-        })
-        .collect();
-
-    Ok(entries)
 }
 
 /// STAGE 6
