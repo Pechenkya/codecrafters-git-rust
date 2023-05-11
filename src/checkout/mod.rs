@@ -42,31 +42,54 @@ pub fn write_refs(refs: &Vec<(String, String)>) -> Result<()> {
     Ok(())
 }
 
-/// Function to checkout to HEAD
+enum HeadRef {
+    Sha(String),
+    Ref(String),
+}
+
+/// Returns reference saved in HEAD
 /// To call we must be right in the working directory
-pub fn checkout_head() -> Result<()> {
+fn get_head_ref() -> Result<HeadRef> {
     let bytes: Vec<u8> = match fs::read(HEAD_PATH) {
         Ok(data) => data,
         Err(_) => {
             bail!("Cannot open '{}'", HEAD_PATH);
         }
     };
-    let head_contentents: String = String::from_utf8(bytes)?;
+    let head_contentents = String::from_utf8(bytes)?;
     // println!("HEAD: {head_contentents}");
 
-    // Get commit referenced by HEAD
-    let commit_hash = if head_contentents.starts_with("ref: ") {
-        let additional_path: &str = &head_contentents[5..head_contentents.len() - 1];
-        let bytes: Vec<u8> = match fs::read(format!(".git/{additional_path}")) {
-            Ok(data) => data,
-            Err(_) => {
-                bail!("Cannot open '{}'", additional_path);
-            }
-        };
-        String::from_utf8(bytes)?[..40].to_owned()
+    if head_contentents.starts_with("ref: ") {
+        Ok(HeadRef::Ref(head_contentents[5..head_contentents.len() - 1].to_string()))
+    } else if head_contentents.len() == 41 {
+        Ok(HeadRef::Sha(head_contentents[..40].to_string()))
     } else {
-        head_contentents[..40].to_owned()
-    };
+        bail!("Incorrect head contents: {head_contentents}!")
+    }
+}
+
+/// Returns referenced commit from HEAD
+/// To call we must be right in the working directory
+fn get_head_commit_sha() -> Result<String> {
+    match get_head_ref()? {
+        HeadRef::Sha(hash) => Ok(hash),
+        HeadRef::Ref(referenced_file) => {
+            let bytes: Vec<u8> = match fs::read(format!(".git/{referenced_file}")) {
+                Ok(data) => data,
+                Err(_) => {
+                    bail!("Cannot open '{}'", referenced_file);
+                }
+            };
+            Ok(String::from_utf8(bytes)?[..40].to_owned())
+        }
+    }
+}
+
+/// Function to checkout to HEAD
+/// To call we must be right in the working directory
+pub fn checkout_head() -> Result<()> {
+    // Get commit referenced by HEAD
+    let commit_hash = get_head_commit_sha()?;
     // println!("commit: {commit_hash:?}");
 
     let commit = String::from_utf8(read_data_decompressed(&commit_hash)?)?;
@@ -121,5 +144,43 @@ fn checkout_tree(tree_hash: &str, path: String) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn format_config(repo_url: &str, branch: &str, head_ref: &str) -> String {
+    format!(
+        "[core]
+\trepositoryformatversion = 0
+\tfilemode = true
+\tbare = false
+\tlogallrefupdates = true
+[remote \"origin\"]
+\turl = {repo_url}
+\tfetch = +refs/heads/*:refs/remotes/origin/*
+[branch \"{branch}\"]
+\tremote = origin
+\tmerge = {head_ref}\n"
+    )
+}
+
+/// Write config file after clone
+/// To call we must be right in the working directory
+pub fn write_config(repo_url: &str) -> Result<()> {
+    if let HeadRef::Ref(head_ref) = get_head_ref()? {
+        let mut cfg_file: fs::File = fs::File::create(format!(".git/config"))?;
+        let branch = head_ref
+            .rsplit_once('/')
+            .ok_or_else(|| anyhow!("Cannot separate branch name!"))?.1;
+        let write_data = format_config(repo_url, branch, &head_ref);
+        cfg_file.write_all(write_data.as_bytes())?;
+    } else {
+        bail!("Not a ref inside HEAD after clone!");
+    }
+    Ok(())
+}
+
+/// Generate index file (stage files)
+#[allow(dead_code)]
+pub fn stage_tree() -> Result<()> {
     Ok(())
 }

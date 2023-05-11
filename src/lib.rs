@@ -222,6 +222,9 @@ pub mod commands {
         write_refs(&refs_response)?;
         checkout_head()?;
 
+        // Setup remote config
+        write_config(repo_url)?;
+
         Ok(format!("Repository '{repo_url}' succesfully cloned into '{folder_path}'"))
     }
 
