@@ -1,7 +1,8 @@
 use serial_test::serial; // To call tests sequentially
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
-use assert_fs::{ prelude::*, TempDir }; // Temp file and file assertion
+use assert_fs::{ prelude::*, TempDir };
+// Temp file and file assertion
 use std::process::Command; // Run programs
 use anyhow::{ anyhow, bail, Result };
 use std::env;
@@ -416,7 +417,8 @@ fn clone_test() -> Result<(), Box<dyn std::error::Error>> {
     print!("Clonning with git clone");
     let temp_folder_2 = assert_fs::TempDir::new()?;
     let mut check_cmd = Command::new("git");
-    check_cmd.args(["clone", remote_repo, temp_folder_2.to_str().unwrap()]).spawn()?;
+    check_cmd.args(["clone", remote_repo, temp_folder_2.to_str().unwrap()]);
+    check_cmd.assert().success();
     println!(" - OK");
 
     // Clone with my git
@@ -431,8 +433,8 @@ fn clone_test() -> Result<(), Box<dyn std::error::Error>> {
     print!("Validating working tree contents");
     let excluded = vec![".git".to_string()];
     let cmp_result = FolderCompare::new(
-        temp_folder_1.path(),
-        temp_folder_2.path(),
+        temp_folder_2.path(), // Compare from
+        temp_folder_1.path(), // Compare to
         &excluded
     ).unwrap();
     assert!(cmp_result.changed_files.is_empty());
@@ -449,6 +451,7 @@ fn clone_test() -> Result<(), Box<dyn std::error::Error>> {
     ).unwrap();
     summary_diff.extend(cmp_result.changed_files);
     summary_diff.extend(cmp_result.new_files);
+    assert!(summary_diff.is_empty());
     println!(" - OK");
 
     // Validating of HEAD commit

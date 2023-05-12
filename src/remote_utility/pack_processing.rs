@@ -210,7 +210,7 @@ fn get_delta_size(buff: &mut Bytes) -> usize {
     let mut byte: u8 = buff.get_u8();
     let mut size: usize = (byte & 0b01111111_u8) as usize;
 
-    let mut bits_to_shift = 7; // First 4 bits are already taken
+    let mut bits_to_shift = 7; // First 7 bits are already taken
     while (byte & 0b10000000_u8) != 0 {
         byte = buff.get_u8();
         // Take 7 free bits and mark them as occupied
