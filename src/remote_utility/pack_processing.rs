@@ -142,6 +142,7 @@ fn parse_object(buff: &mut Bytes) -> Result<ParsedObject> {
     let obj_type: Vec<u8> = OBJ_TYPES.get(obj_type_id as usize)
         .ok_or_else(|| anyhow!("Unexpected type id in PACK: {}", obj_type_id))?
         .to_vec();
+    println!("{obj_type_id}");
 
     if (1..=4).contains(&obj_type_id) {
         // Try to decompress and drop consumed data

@@ -1,8 +1,7 @@
 use serial_test::serial; // To call tests sequentially
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*; // Used for writing assertions
-use assert_fs::{ prelude::*, TempDir };
-// Temp file and file assertion
+use assert_fs::{ prelude::*, TempDir }; // Temp file and file assertion
 use std::process::Command; // Run programs
 use anyhow::{ anyhow, bail, Result };
 use std::env;
@@ -105,8 +104,8 @@ fn init_cmd() -> Result<(), Box<dyn std::error::Error>> {
     let text_data = &fs::read(temp_folder.child(".git/HEAD"))?;
     assert_eq!("ref: refs/heads/master\n", &String::from_utf8_lossy(text_data));
 
-    temp_folder.close()?;
     env::set_current_dir("/")?;
+    temp_folder.close()?;
 
     Ok(())
 }
@@ -149,8 +148,8 @@ fn read_blob() -> Result<(), Box<dyn std::error::Error>> {
     cmd.assert().success().stdout(predicate::eq(TEST_DATA));
     println!(" - OK");
 
-    temp_folder.close()?;
     env::set_current_dir("/")?;
+    temp_folder.close()?;
 
     Ok(())
 }
@@ -196,8 +195,8 @@ fn write_blob() -> Result<(), Box<dyn std::error::Error>> {
     check_cmd.assert().success().stdout(predicate::eq(TEST_DATA));
     println!(" - OK");
 
-    temp_folder.close()?;
     env::set_current_dir("/")?;
+    temp_folder.close()?;
 
     Ok(())
 }
@@ -254,8 +253,8 @@ fn read_tree() -> Result<(), Box<dyn std::error::Error>> {
         .stdout(predicate::eq(format!("{}\n", expected_result.join("\n"))));
     println!(" - OK");
 
-    temp_folder.close()?;
     env::set_current_dir("/")?;
+    temp_folder.close()?;
 
     Ok(())
 }
@@ -305,8 +304,8 @@ fn write_tree() -> Result<(), Box<dyn std::error::Error>> {
         .stdout(predicate::eq(format!("{}\n", expected_result.join("\n"))));
     println!(" - OK");
 
-    temp_folder.close()?;
     env::set_current_dir("/")?;
+    temp_folder.close()?;
 
     Ok(())
 }
@@ -393,8 +392,8 @@ fn commit_test() -> Result<(), Box<dyn std::error::Error>> {
 
     println!(" - OK");
 
-    temp_folder.close()?;
     env::set_current_dir("/")?;
+    temp_folder.close()?;
 
     Ok(())
 }
@@ -437,6 +436,7 @@ fn clone_test() -> Result<(), Box<dyn std::error::Error>> {
         temp_folder_1.path(), // Compare to
         &excluded
     ).unwrap();
+    println!("{:?}", temp_folder_1.path());
     assert!(cmp_result.changed_files.is_empty());
     assert!(cmp_result.new_files.is_empty());
     println!(" - OK");

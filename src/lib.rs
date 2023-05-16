@@ -243,7 +243,7 @@ pub mod commands {
         #[test]
         fn send_request_to_clone() {
             fs::remove_dir_all("/tmp/clone_repo_test").unwrap();
-            let res = clone_repo(&TEST_REPO_3.to_string(), &"/tmp/clone_repo_test".to_string());
+            let res = clone_repo(&TEST_REPO_2.to_string(), &"/tmp/clone_repo_test".to_string());
             println!("{:?}", res);
             assert!(res.is_ok());
         }
